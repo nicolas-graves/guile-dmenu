@@ -1,4 +1,5 @@
 (use-modules (guile-dmenu memory-utils)
+             (guile-dmenu graphics)
              (wayland client display)
              (wayland client protocol wayland)
              (wayland client protocol xdg-shell)
@@ -10,8 +11,7 @@
              (ice-9 textual-ports)
              (rnrs bytevectors)
              (xkbcommon xkbcommon)
-             (xkbcommon keysyms)
-             (cairo))
+             (xkbcommon keysyms))
 
 ;; Prevent GC to avoid potential segment faults during drawing
 (gc-disable)
@@ -25,6 +25,7 @@
 (define seat (make-parameter #f))
 (define keyboard (make-parameter #f))
 (define width* (make-parameter 800))
+(define padding* (make-parameter 8))
 (define options* (make-parameter '()))
 (define max-options* (make-parameter 10))
 (define prompt* (make-parameter "dmenu: "))
@@ -42,21 +43,6 @@
 (define PROT_WRITE 2)
 (define MAP_SHARED 1)
 (define WL_SHM_FORMAT_ARGB8888 0)
-
-;; Cairo font settings
-(define font-face "Sans")
-(define font-size 14)
-(define background-color '(0.1 0.1 0.1))
-(define foreground-color '(0.9 0.9 0.9))
-(define selected-color '(0.4 0.4 0.8))
-(define input-color '(1.0 0.8 0.2))
-(define item-padding 8)
-(define item-height (+ font-size (* 2 item-padding)))
-
-(define wl-buffer-listener
-  (make <wl-buffer-listener>
-    #:release (lambda (data buffer)
-                (wl-buffer-destroy buffer))))
 
 ;; Filter options based on input text
 (define (filter-options)
@@ -221,91 +207,12 @@
     (lambda (data seat name)
       #t)))
 
-;; Draw the menu
+;; Draw the menu using the graphics module
 (define (draw-frame)
-  (let* ((width (width*))
-         (height (* (+ 1 (min (length (filtered-options*)) (max-options*))) item-height))
-         (stride (* 4 width))
-         (size (* stride height))
-         (fd (memfd-create "guile-wl-dmenu" 1))
-         (_ (truncate-file fd size))
-         (data (mmap #f size (logior PROT_READ PROT_WRITE) MAP_SHARED fd 0))
-         (pool (wl-shm-create-pool (shm) fd size))
-         (buffer (wl-shm-pool-create-buffer
-                  pool 0
-                  width height stride
-                  WL_SHM_FORMAT_ARGB8888)))
-
-    ;; Draw to the buffer using Cairo
-    (let* ((surface (cairo-image-surface-create-for-data
-                     data
-                     'argb32
-                     width
-                     height
-                     stride))
-           (cr (cairo-create surface)))
-
-      ;; Set background
-      (apply cairo-set-source-rgb cr background-color)
-      (cairo-rectangle cr 0 0 width height)
-      (cairo-fill cr)
-
-      ;; Set font
-      (cairo-select-font-face cr font-face 'normal 'normal)
-      (cairo-set-font-size cr font-size)
-
-      ;; Draw input prompt
-      (apply cairo-set-source-rgb cr foreground-color)
-      (cairo-move-to cr item-padding (/ (+ font-size item-height) 2))
-      (cairo-show-text cr (prompt*))
-
-      ;; Use fixed position after prompt
-      (let ((x-position (+ item-padding 100))) ; Fixed offset for simplicity
-
-        ;; Draw input text
-        (apply cairo-set-source-rgb cr input-color)
-        (cairo-move-to cr x-position (/ (+ font-size item-height) 2))
-        (cairo-show-text cr (input-text*))
-
-        ;; Draw cursor at end of input (simple approach)
-        ;; (let ((cursor-x (+ x-position (* (string-length (input-text*)) (/ font-size 1.5)))))
-        ;;   (apply cairo-set-source-rgb cr foreground-color)
-        ;;   (cairo-rectangle cr cursor-x (item-padding) 2 (- item-height (* 2 item-padding)))
-        ;;   (cairo-fill cr))
-        )
-
-      ;; Draw menu items
-      (let loop ((items (filtered-options*))
-                 (index 0))
-        (when (and (not (null? items))
-                   (< index (max-options*)))
-          (let ((y (+ item-height (* index item-height))))
-            ;; Draw selection background if this is the selected item
-            (when (= index (selected-index*))
-              (apply cairo-set-source-rgb cr selected-color)
-              (cairo-rectangle cr 0 y width item-height)
-              (cairo-fill cr))
-
-            ;; Draw item text
-            (if (= index (selected-index*))
-                (apply cairo-set-source-rgb cr foreground-color)
-                (apply cairo-set-source-rgb cr foreground-color))
-            (cairo-move-to cr item-padding (+ y (/ item-height 2) (/ font-size 2)))
-            (cairo-show-text cr (car items))
-            (loop (cdr items) (+ index 1)))))
-
-      ;; Clean up Cairo resources
-      (cairo-destroy cr)
-      (cairo-surface-destroy surface))
-
-    ;; Clean up pool and memory
-    (wl-shm-pool-destroy pool)
-    (close-fdes fd)
-    (munmap data)
-
-    ;; Add listener to buffer and return it
-    (wl-buffer-add-listener buffer wl-buffer-listener)
-    buffer))
+  (let ((height (* (+ 1 (min (length (filtered-options*)) (max-options*)))
+                   (+ 14 (* 2 (padding*))))))
+    (draw-menu (width*) height (padding*) (shm) (prompt*) (input-text*)
+               (selected-index*) (filtered-options*) (max-options*))))
 
 ;; Force a redraw of the window
 (define (redraw)
