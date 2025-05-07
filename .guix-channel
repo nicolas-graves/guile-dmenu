@@ -1,0 +1,10 @@
+;; -*- mode: lisp -*-
+(channel
+ (version 0)
+ (url "https://git.sr.ht/~ngraves/guile-dmenu")
+ (directory ".guix/modules")
+ (dependencies
+  (channel
+   (name guile-wayland)
+   (branch "master")
+   (url "https://github.com/guile-wayland/channel"))))
