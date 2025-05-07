@@ -1,5 +1,7 @@
 (use-modules (guile-dmenu memory-utils)
              (guile-dmenu graphics)
+             (guile-dmenu keyboard)
+             (guile-dmenu input)
              (wayland client display)
              (wayland client protocol wayland)
              (wayland client protocol xdg-shell)
@@ -9,9 +11,7 @@
              (ice-9 match)
              (ice-9 rdelim)
              (ice-9 textual-ports)
-             (rnrs bytevectors)
-             (xkbcommon xkbcommon)
-             (xkbcommon keysyms))
+             (rnrs bytevectors))
 
 ;; Prevent GC to avoid potential segment faults during drawing
 (gc-disable)
@@ -23,7 +23,6 @@
 (define xdg-toplevel (make-parameter #f))
 (define wsurface (make-parameter #f))
 (define seat (make-parameter #f))
-(define keyboard (make-parameter #f))
 (define width* (make-parameter 800))
 (define padding* (make-parameter 8))
 (define options* (make-parameter '()))
@@ -32,180 +31,6 @@
 (define selected-index* (make-parameter 0))
 (define input-text* (make-parameter ""))
 (define filtered-options* (make-parameter '()))
-
-;; XKB state for handling key translation
-(define xkb-context (make-parameter #f))
-(define xkb-keymap (make-parameter #f))
-(define xkb-state (make-parameter #f))
-
-;; Buffer creation and drawing configuration
-(define PROT_READ 1)
-(define PROT_WRITE 2)
-(define MAP_SHARED 1)
-(define WL_SHM_FORMAT_ARGB8888 0)
-
-;; Filter options based on input text
-(define (filter-options)
-  (let ((input (input-text*)))
-    (if (string-null? input)
-        (filtered-options* (options*))
-        (filtered-options* (filter
-                           (lambda (opt)
-                             (string-contains-ci opt input))
-                           (options*))))))
-
-;; Select option and exit with result
-(define (select-option)
-  (let* ((filtered (filtered-options*))
-         (idx (selected-index*)))
-    (when (and (not (null? filtered))
-               (< idx (length filtered)))
-      (let ((selected (list-ref filtered idx)))
-        (format #t "~a~%" selected)
-        (exit 0)))))
-
-;; Process a keymap received from the compositor
-(define (process-keymap format fd size)
-  ;; Initialize the XKB context if not already done
-  (unless (xkb-context)
-    (xkb-context (xkb-context-new)))
-
-  (let* ((ctx (xkb-context))
-         (data (mmap #f size PROT_READ MAP_SHARED fd 0))
-         (keymap-string (utf8->string data)))
-
-    ;; Create a new keymap from the provided data
-    (let ((km (xkb-keymap-new ctx keymap-string)))
-      (xkb-keymap km)
-      ;; Create a new state object from the keymap
-      (xkb-state (xkb-state-new km))
-      (munmap data))))
-
-;; Handle keyboard key events
-(define (handle-key key state)
-  (when (= state 1) ; Key pressed
-    (let* ((xkb-key (+ 8 key))
-           (keysym (xkb-state-key-get-one-sym (xkb-state) xkb-key)))
-      (cond
-       ;; ESC - Exit program
-       ((= keysym XKB_KEY_Escape)
-        (exit 1))
-
-       ;; Enter - Select current option
-       ((= keysym XKB_KEY_Return)
-        (select-option))
-
-       ;; Down arrow - Move selection down
-       ((= keysym XKB_KEY_Down)
-        (let* ((filtered (filtered-options*))
-               (current (selected-index*))
-               (new-idx (if (< (+ current 1) (length filtered))
-                            (+ current 1)
-                            current)))
-          (selected-index* new-idx)
-          (redraw)))
-
-       ;; Up arrow - Move selection up
-       ((= keysym XKB_KEY_Up)
-        (let* ((current (selected-index*))
-               (new-idx (if (> current 0) (- current 1) 0)))
-          (selected-index* new-idx)
-          (redraw)))
-
-       ;; Backspace - Delete last character of input
-       ((= keysym XKB_KEY_BackSpace)
-        (let ((current-text (input-text*)))
-          (unless (string-null? current-text)
-            (input-text* (substring current-text 0 (- (string-length current-text) 1)))
-            (filter-options)
-            (selected-index* 0)
-            (redraw))))
-
-       ;; Regular character input
-       (else
-        (let ((name (pk 'name (xkb-keysym-get-name (pk 'keysym keysym))))
-              (utf32 (xkb-state-key-get-utf32 (xkb-state) xkb-key)))
-          (when (and (>= utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
-            (let* ((char (pk 'char (integer->char utf32)))
-                   (current-text (input-text*)))
-              (input-text* (pk 'input (string-append current-text (string char))))
-              (filter-options)
-              (selected-index* 0)
-              (redraw)))))))))
-
-;; Initialize a fallback XKB keymap
-(define (initialize-fallback-keymap)
-  (let* ((ctx (xkb-context-new))
-         ;; Create a rule names structure for the current locale
-         (locale (or (getenv "LC_ALL")
-                    (getenv "LC_CTYPE")
-                    (getenv "LANG")
-                    "C"))
-         ;; Parse locale to get language code
-         (locale-parts (string-split locale #\_))
-         (lang (if (>= (length locale-parts) 1)
-                  (car locale-parts)
-                  "us"))
-
-         ;; Create rule names with user's layout
-         (names (make <xkb-rule-names>
-                  #:rules "evdev"
-                  #:model "pc105"
-                  #:layout lang)))
-
-    (xkb-context ctx)
-    (let ((km (xkb-keymap-new ctx names)))
-      (xkb-keymap km)
-      (xkb-state (xkb-state-new km)))))
-
-;; Set up keyboard listener
-(define wl-keyboard-listener
-  (make <wl-keyboard-listener>
-    #:keymap
-    (lambda (data keyboard format fd size)
-      (process-keymap format fd size)
-      (close-fdes fd))
-
-    #:enter
-    (lambda (data keyboard serial surface keys)
-      #t)
-
-    #:leave
-    (lambda (data keyboard serial surface)
-      #t)
-
-    #:key
-    (lambda (data keyboard serial time key state)
-      (handle-key key state))
-
-    #:modifiers
-    (lambda (data keyboard serial mods-depressed mods-latched mods-locked group)
-      ;; Update the XKB state with the current modifier state
-      (when (xkb-state)
-        (xkb-state-update-mask (xkb-state)
-                              mods-depressed
-                              mods-latched
-                              mods-locked
-                              0 0 group)))
-
-    #:repeat-info
-    (lambda (data keyboard rate delay)
-      #t)))
-
-;; Set up seat listener
-(define wl-seat-listener
-  (make <wl-seat-listener>
-    #:capabilities
-    (lambda (data seat capabilities)
-      ;; Check if keyboard capability is available (bit 1)
-      (when (logand capabilities 2)
-        (let ((kb (wl-seat-get-keyboard seat)))
-          (keyboard kb)
-          (wl-keyboard-add-listener kb wl-keyboard-listener))))
-
-    #:name
-    (lambda (data seat name)
-      #t)))
 
 ;; Draw the menu using the graphics module
 (define (draw-frame)
@@ -221,14 +46,27 @@
       (wl-surface-attach (wsurface) buffer 0 0)
       (wl-surface-commit (wsurface)))))
 
+;; Read options from stdin
 (define (read-stdin)
   (let loop ((line (read-line)))
       (unless (eof-object? line)
         (options* (append (options*) (list line)))
         (loop (read-line)))))
 
+;; Our key handler that adapts to the keyboard module interface
+(define (handle-key key)
+  (let ((input-handler (make-input-handler
+                        redraw
+                        input-text*
+                        selected-index*
+                        filtered-options*
+                        options*
+                        max-options*)))
+    (input-handler key (xkb-state))))
+
 ;; Main function
 (define (main . args)
+  ;; Read options from stdin
   (read-stdin)
 
   ;; Initialize filtered options
@@ -236,6 +74,9 @@
 
   ;; Initialize XKB for keyboard handling
   (initialize-fallback-keymap)
+
+  ;; Set our key handler
+  (set-key-handler! handle-key)
 
   ;; Connect to Wayland display
   (let* ((w-display (wl-display-connect)))
@@ -312,17 +153,12 @@
          (make <xdg-toplevel-listener>
            #:configure
            (lambda (data xdg width _height states)
-             (pk 'config data xdg width _height states)
              (unless (zero? width)
                (width* width)))
            #:close
            (lambda (data xdg-toplevel)
              (exit 0))))
 
-        ;; Initial draw and commit
-        ;; (let ((buffer (draw-frame)))
-        ;;   (wl-surface-attach surface buffer 0 0)
-        ;;   (wl-surface-commit surface))
         (wl-surface-commit surface)
 
         ;; Main event loop

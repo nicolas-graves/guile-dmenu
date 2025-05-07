@@ -8,10 +8,6 @@
   #:export (draw-menu
             wl-buffer-listener))
 
-;; Buffer creation and drawing configuration
-(define PROT_READ 1)
-(define PROT_WRITE 2)
-(define MAP_SHARED 1)
 (define WL_SHM_FORMAT_ARGB8888 0)
 
 ;; Cairo font settings

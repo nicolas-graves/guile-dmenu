@@ -2,9 +2,17 @@
   #:use-module ((system foreign) #:prefix ffi:)
   #:use-module (system foreign-library)
   #:use-module (rnrs bytevectors)
-  #:export (memfd-create
+  #:export (PROT_READ
+            PROT_WRITE
+            MAP_SHARED
+            memfd-create
             mmap
             munmap))
+
+;; Enums
+(define PROT_READ 1)
+(define PROT_WRITE 2)
+(define MAP_SHARED 1)
 
 (define memfd-create
   (let ((% (foreign-library-function
