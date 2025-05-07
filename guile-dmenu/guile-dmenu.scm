@@ -5,6 +5,7 @@
              (oop goops)
              (ice-9 format)
              (ice-9 getopt-long)
+             (ice-9 match)
              (ice-9 rdelim)
              (ice-9 textual-ports)
              (rnrs bytevectors)
@@ -340,28 +341,30 @@
           (listener (make <wl-registry-listener>
                       #:global
                       (lambda (data registry name interface version)
-                        (cond
-                         ((string=? "wl_compositor" interface)
-                          (compositor (wrap-wl-compositor
-                                       (wl-registry-bind
-                                        registry name
-                                        %wl-compositor-interface 3))))
-                         ((string=? "wl_shm" interface)
-                          (shm (wrap-wl-shm
-                                (wl-registry-bind registry name %wl-shm-interface 1))))
-                         ((string=? "xdg_wm_base" interface)
-                          (xdg-wm-base
-                           (wrap-xdg-wm-base
-                            (wl-registry-bind registry name %xdg-wm-base-interface 1)))
-                          (xdg-wm-base-add-listener
-                           (xdg-wm-base)
-                           (make <xdg-wm-base-listener>
-                             #:ping (lambda (data base serial)
-                                      (xdg-wm-base-pong base serial)))))
-                         ((string=? "wl_seat" interface)
-                          (seat (wrap-wl-seat
-                                 (wl-registry-bind registry name %wl-seat-interface 7)))
-                          (wl-seat-add-listener (seat) wl-seat-listener))))
+                        (match interface
+                          ("wl_compositor"
+                           (compositor (wrap-wl-compositor
+                                        (wl-registry-bind
+                                         registry name
+                                         %wl-compositor-interface 3))))
+                          ("wl_shm"
+                           (shm (wrap-wl-shm
+                                 (wl-registry-bind registry name %wl-shm-interface 1))))
+                          ("xdg_wm_base"
+                           (xdg-wm-base
+                            (wrap-xdg-wm-base
+                             (wl-registry-bind registry name %xdg-wm-base-interface 1)))
+                           (xdg-wm-base-add-listener
+                            (xdg-wm-base)
+                            (make <xdg-wm-base-listener>
+                              #:ping (lambda (data base serial)
+                                       (xdg-wm-base-pong base serial)))))
+                          ("wl_seat"
+                           (seat (wrap-wl-seat
+                                  (wl-registry-bind registry name %wl-seat-interface 7)))
+                           (wl-seat-add-listener (seat) wl-seat-listener))
+                          (_
+                           #t)))
                       #:global-remove
                       (lambda (data registry name)
                         #t))))
