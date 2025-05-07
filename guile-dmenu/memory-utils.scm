@@ -1,0 +1,34 @@
+(define-module (guile-dmenu memory-utils)
+  #:use-module ((system foreign) #:prefix ffi:)
+  #:use-module (system foreign-library)
+  #:use-module (rnrs bytevectors)
+  #:export (memfd-create
+            mmap
+            munmap))
+
+(define memfd-create
+  (let ((% (foreign-library-function
+            #f "memfd_create"
+            #:return-type ffi:int
+            #:arg-types `(* ,ffi:unsigned-int))))
+    (lambda (name flags)
+      (% (ffi:string->pointer name) flags))))
+
+(define mmap
+  (let ((% (foreign-library-function
+            #f "mmap"
+            #:return-type '*
+            #:arg-types `(* ,ffi:size_t ,ffi:int ,ffi:int ,ffi:int ,ffi:long))))
+    (lambda (address length prot flags fd offset)
+      (ffi:pointer->bytevector
+       (% (or address ffi:%null-pointer) length prot flags fd offset)
+       length))))
+
+(define munmap
+  (let ((% (foreign-library-function
+            #f "munmap"
+            #:return-type ffi:int
+            #:arg-types `(* ,ffi:size_t))))
+    (lambda* (address)
+      (% (ffi:bytevector->pointer address)
+         (bytevector-length address)))))
