@@ -36,12 +36,9 @@
                                               XKB_STATE_MODS_EFFECTIVE)
                                              1)))))
       (cond
-       ;; ESC - Exit program
-       ((= keysym XKB_KEY_Escape)
-        (exit 1))
-
-       ;; Ctrl-c/g - Exit program
-       ((and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g)))
+       ;; ESC/Ctrl+g/c - Exit program
+       ((or (= keysym XKB_KEY_Escape)
+            (and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g))))
         (exit 1))
 
        ;; Enter - Select current option
@@ -69,19 +66,22 @@
        ((= keysym XKB_KEY_BackSpace)
         (let ((current-text (input-text)))
           (unless (string-null? current-text)
-            (input-text (substring current-text 0 (- (string-length current-text) 1)))
+            (input-text (pk 'input (string-drop-right current-text 1)))
             (filtered-options (filter-options (options) (input-text)))
             (selected-index 0)
             (on-change))))
 
-       ;; Regular character input
        (else
         (unless ctrl-pressed
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
-            (when (and (>= utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
-              (let* ((char (integer->char utf32))
-                     (current-text (input-text)))
-                (input-text (string-append current-text (string char)))
-                (filtered-options (filter-options (options) (input-text)))
-                (selected-index 0)
-                (on-change))))))))))
+            ;; Conveniently special characters have their utf32 equal to 0.
+            (cond ((= utf32 0)
+                   (pk 'unhandled-keysym (number->string keysym 16)))
+                  ;; Regular character input
+                  ((and (> utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
+                   (let* ((char (integer->char utf32))
+                          (current-text (input-text)))
+                     (input-text (pk 'input (string-append current-text (string char))))
+                     (filtered-options (filter-options (options) (input-text)))
+                     (selected-index 0)
+                     (on-change)))))))))))
