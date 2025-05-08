@@ -44,6 +44,7 @@
   (when (and (wsurface) (shm))
     (let ((buffer (draw-frame)))
       (wl-surface-attach (wsurface) buffer 0 0)
+      (wl-surface-damage (wsurface) 0 0 (width*) 1000)
       (wl-surface-commit (wsurface)))))
 
 ;; Read options from stdin
