@@ -92,13 +92,12 @@
         (cairo-show-text cr input-text)
 
         ;; Draw cursor at end of input
-        ;; (let* ((input-extents (cairo-text-extents cr input-text))
-        ;;        (input-width (cairo-text-extents:width input-extents))
-        ;;        (cursor-x (+ x-position input-width 2)))
-        ;;   (apply cairo-set-source-rgb cr foreground-color)
-        ;;   (cairo-rectangle cr cursor-x padding 2 (- item-height (* 2 padding)))
-        ;;   (cairo-fill cr))
-        )
+        (let* ((input-extents (cairo-text-extents cr input-text))
+               (input-width (cairo-text-extents:width input-extents))
+               (cursor-x (+ x-position input-width 2)))
+          (apply cairo-set-source-rgb cr foreground-color)
+          (cairo-rectangle cr cursor-x padding 2 (- item-height (* 2 padding)))
+          (cairo-fill cr)))
 
       ;; Draw menu items
       (let loop ((items filtered-options)
