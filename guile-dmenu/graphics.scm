@@ -98,19 +98,15 @@
       ;; Draw menu items
       (let loop ((items filtered-options)
                  (index 0))
-        (when (and (not (null? items))
-                   (< index max-options))
+        (when (and (not (null? items)) (< index max-options))
           (let ((y (+ item-height (* index item-height))))
             ;; Draw selection background if this is the selected item
             (when (= index selected-index)
               (apply cairo-set-source-rgb cr selected-color)
               (cairo-rectangle cr 0 y width item-height)
               (cairo-fill cr))
-
             ;; Draw item text
-            (if (= index selected-index)
-                (apply cairo-set-source-rgb cr foreground-color)
-                (apply cairo-set-source-rgb cr foreground-color))
+            (apply cairo-set-source-rgb cr foreground-color)
             (cairo-move-to cr padding (+ y (/ item-height 2) (/ font-size 2)))
             (cairo-show-text cr (car items))
             (loop (cdr items) (+ index 1)))))

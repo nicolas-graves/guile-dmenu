@@ -47,9 +47,8 @@
 
        ;; Down arrow - Move selection down
        ((= keysym XKB_KEY_Down)
-        (let* ((filtered (filtered-options))
-               (current (selected-index))
-               (new-idx (if (< (+ current 1) (length filtered))
+        (let* ((current (selected-index))
+               (new-idx (if (< (+ current 1) (length (filtered-options)))
                             (+ current 1)
                             current)))
           (selected-index new-idx)
