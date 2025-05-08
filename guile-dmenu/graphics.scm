@@ -96,7 +96,7 @@
                (input-width (cairo-text-extents:width input-extents))
                (cursor-x (+ x-position input-width 2)))
           (apply cairo-set-source-rgb cr foreground-color)
-          (cairo-rectangle cr cursor-x padding 2 (- item-height (* 2 padding)))
+          (cairo-rectangle cr cursor-x padding 2 (- item-height (/ (* 3 padding) 2)))
           (cairo-fill cr))
 
         ;; Draw menu items
