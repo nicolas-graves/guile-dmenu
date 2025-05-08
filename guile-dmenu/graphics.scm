@@ -97,23 +97,23 @@
                (cursor-x (+ x-position input-width 2)))
           (apply cairo-set-source-rgb cr foreground-color)
           (cairo-rectangle cr cursor-x padding 2 (- item-height (* 2 padding)))
-          (cairo-fill cr)))
+          (cairo-fill cr))
 
-      ;; Draw menu items
-      (let loop ((items filtered-options)
-                 (index 0))
-        (when (and (not (null? items)) (< index max-options))
-          (let ((y (+ item-height (* index item-height))))
-            ;; Draw selection background if this is the selected item
-            (when (= index selected-index)
-              (apply cairo-set-source-rgb cr selected-color)
-              (cairo-rectangle cr 0 y width item-height)
-              (cairo-fill cr))
-            ;; Draw item text
-            (apply cairo-set-source-rgb cr foreground-color)
-            (cairo-move-to cr padding (+ y (/ item-height 2) (/ font-size 2)))
-            (cairo-show-text cr (car items))
-            (loop (cdr items) (+ index 1)))))
+        ;; Draw menu items
+        (let loop ((items filtered-options)
+                   (index 0))
+          (when (and (not (null? items)) (< index max-options))
+            (let ((y (+ item-height (* index item-height))))
+              ;; Draw selection background if this is the selected item
+              (when (= index selected-index)
+                (apply cairo-set-source-rgb cr selected-color)
+                (cairo-rectangle cr 0 y width item-height)
+                (cairo-fill cr))
+              ;; Draw item text
+              (apply cairo-set-source-rgb cr foreground-color)
+              (cairo-move-to cr x-position (+ y (/ item-height 2) (/ font-size 2)))
+              (cairo-show-text cr (car items))
+              (loop (cdr items) (+ index 1))))))
 
       ;; Clean up Cairo resources
       (cairo-destroy cr)
