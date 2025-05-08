@@ -29,10 +29,19 @@
                             filtered-options options max-options)
   (lambda (key xkb-state)
     (let* ((xkb-key (+ 8 key))
-           (keysym (xkb-state-key-get-one-sym xkb-state xkb-key)))
+           (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
+           (ctrl-pressed (not (zero? (logand (xkb-state-mod-name-is-active
+                                              xkb-state
+                                              "Control"
+                                              XKB_STATE_MODS_EFFECTIVE)
+                                             1)))))
       (cond
        ;; ESC - Exit program
        ((= keysym XKB_KEY_Escape)
+        (exit 1))
+
+       ;; Ctrl-c/g - Exit program
+       ((and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g)))
         (exit 1))
 
        ;; Enter - Select current option
@@ -67,11 +76,12 @@
 
        ;; Regular character input
        (else
-        (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
-          (when (and (>= utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
-            (let* ((char (integer->char utf32))
-                   (current-text (input-text)))
-              (input-text (string-append current-text (string char)))
-              (filtered-options (filter-options (options) (input-text)))
-              (selected-index 0)
-              (on-change)))))))))
+        (unless ctrl-pressed
+          (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
+            (when (and (>= utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
+              (let* ((char (integer->char utf32))
+                     (current-text (input-text)))
+                (input-text (string-append current-text (string char)))
+                (filtered-options (filter-options (options) (input-text)))
+                (selected-index 0)
+                (on-change))))))))))
