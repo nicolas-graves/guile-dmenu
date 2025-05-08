@@ -74,24 +74,29 @@
       (cairo-select-font-face cr font-face 'normal 'normal)
       (cairo-set-font-size cr font-size)
 
-      ;; Draw input prompt
-      (apply cairo-set-source-rgb cr foreground-color)
-      (cairo-move-to cr padding (/ (+ font-size item-height) 2))
-      (cairo-show-text cr prompt)
+      ;; Calculate the text extents for the prompt
+      (let* ((text-extents (cairo-text-extents cr prompt))
+             (prompt-width (cairo-text-extents:width text-extents))
+             (prompt-x-advance (cairo-text-extents:x-advance text-extents))
+             ;; Position after the prompt with a small gap
+             (x-position (+ padding prompt-x-advance 2)))
 
-      ;; Use fixed position after prompt
-      (let ((x-position (+ padding 100))) ; Fixed offset for simplicity
+        ;; Draw input prompt
+        (apply cairo-set-source-rgb cr foreground-color)
+        (cairo-move-to cr padding (/ (+ font-size item-height) 2))
+        (cairo-show-text cr prompt)
 
         ;; Draw input text
         (apply cairo-set-source-rgb cr input-color)
         (cairo-move-to cr x-position (/ (+ font-size item-height) 2))
         (cairo-show-text cr input-text)
 
-        ;; Draw cursor at end of input (simple approach)
-        ;; Commented out for now as in the original
-        ;; (let ((cursor-x (+ x-position (* (string-length input-text) (/ font-size 1.5)))))
+        ;; Draw cursor at end of input
+        ;; (let* ((input-extents (cairo-text-extents cr input-text))
+        ;;        (input-width (cairo-text-extents:width input-extents))
+        ;;        (cursor-x (+ x-position input-width 2)))
         ;;   (apply cairo-set-source-rgb cr foreground-color)
-        ;;   (cairo-rectangle cr cursor-x (padding) 2 (- item-height (* 2 padding)))
+        ;;   (cairo-rectangle cr cursor-x padding 2 (- item-height (* 2 padding)))
         ;;   (cairo-fill cr))
         )
 
