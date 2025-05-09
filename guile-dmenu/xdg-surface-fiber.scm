@@ -1,5 +1,6 @@
 (define-module (guile-dmenu xdg-surface-fiber)
-  #:use-module (ice-9 records)
+  #:use-module (srfi srfi-9)
+  #:use-module (ice-9 match)
   #:use-module (oop goops)
   #:use-module (fibers)
   #:use-module (fibers channels)
@@ -43,7 +44,7 @@
        (loop)))))
 
 ;; Complete setup function
-(define (setup-xdg-surface-fiber xdg-surface #:key (configure-callback #f))
+(define* (setup-xdg-surface-fiber xdg-surface #:key (configure-callback #f))
   (let ((xdg-surface-context (make-xdg-surface-fiber-context
                               (make-channel)      ; configure
                               configure-callback)))

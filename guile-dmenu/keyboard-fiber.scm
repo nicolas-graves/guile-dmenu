@@ -1,5 +1,6 @@
 (define-module (guile-dmenu keyboard-fiber)
-  #:use-module (ice-9 records)
+  #:use-module (srfi srfi-9)
+  #:use-module (ice-9 match)
   #:use-module (oop goops)
   #:use-module (fibers)
   #:use-module (fibers channels)
@@ -113,7 +114,7 @@
                                    mods-locked
                                    0 0 group)))
 
-         (('repeat-info keyboard rate delay)
+         (('repeat-info keyboard rate delay-time)
           ;; Handle repeat info
           #t))
 

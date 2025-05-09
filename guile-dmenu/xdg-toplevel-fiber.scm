@@ -1,5 +1,6 @@
 (define-module (guile-dmenu xdg-toplevel-fiber)
-  #:use-module (ice-9 records)
+  #:use-module (srfi srfi-9)
+  #:use-module (ice-9 match)
   #:use-module (oop goops)
   #:use-module (fibers)
   #:use-module (fibers channels)
@@ -66,7 +67,7 @@
        (loop)))))
 
 ;; Complete setup function
-(define (setup-xdg-toplevel-fiber xdg-toplevel
+(define* (setup-xdg-toplevel-fiber xdg-toplevel
                                    #:key
                                    (configure-callback #f)
                                    (close-callback #f))

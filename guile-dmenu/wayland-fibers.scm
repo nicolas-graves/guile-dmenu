@@ -2,11 +2,12 @@
   #:use-module (fibers)
   #:use-module (fibers channels)
   #:use-module (fibers operations)
-  #:use-module (fibers conditions)
+  #:use-module (fibers io-wakeup)
   #:use-module (wayland client display)
   #:use-module (wayland client protocol wayland)
   #:use-module (wayland client protocol xdg-shell)
   #:use-module (ice-9 match)
+  #:use-module (srfi srfi-8)  ; for receive
   #:use-module (srfi srfi-9)
   #:use-module (oop goops)
 
@@ -34,17 +35,19 @@
 ;; Main connection object for fiber-based Wayland
 (define-record-type <wayland-fiber-connection>
   (make-wayland-fiber-connection display registry-context control-channel
-                                 running? dispatcher-fiber)
+                                 running? dispatcher-fiber registry-processor)
   wayland-fiber-connection?
   (display wfc-display)
   (registry-context wfc-registry-context)
   (control-channel wfc-control-channel)
   (running? wfc-running? set-wfc-running?!)
-  (dispatcher-fiber wfc-dispatcher-fiber set-wfc-dispatcher-fiber!))
+  (dispatcher-fiber wfc-dispatcher-fiber set-wfc-dispatcher-fiber!)
+  (registry-processor wfc-registry-processor set-wfc-registry-processor!))
 
 ;; Helper to get globals from registry
 (define (get-global conn interface-key)
-  (hash-ref (registry-globals (wfc-registry-context conn)) interface-key))
+  (let ((registry-ctx (wfc-registry-context conn)))
+    (hash-ref (registry-globals registry-ctx) interface-key)))
 
 ;; Event dispatcher fiber
 (define (event-dispatcher-loop connection)
@@ -67,58 +70,68 @@
 
         ('timeout
          (when (wfc-running? connection)
-           ;; Handle Wayland events
+           ;; Handle Wayland events - simplified without prepare-read
            (let ((fd (wl-display-get-fd display)))
-             ;; Prepare to read events
-             (when (zero? (wl-display-prepare-read display))
-               ;; Wait for events to be available
-               (match (perform-operation
-                       (choice-operation
-                        (wrap-operation
-                         (wait-until-port-readable-operation (fdopen fd "r"))
-                         (const 'readable))
-                        (wrap-operation
-                         (sleep-operation 0.1)
-                         (const 'timeout))))
+             ;; Wait for events to be available
+             (match (perform-operation
+                     (choice-operation
+                      (wrap-operation
+                       (wait-until-port-readable-operation (fdopen fd "r"))
+                       (const 'readable))
+                      (wrap-operation
+                       (sleep-operation 0.1)
+                       (const 'timeout))))
 
-                 ('readable
-                  (wl-display-read-events display))
+               ('readable
+                ;; Dispatch available events
+                (wl-display-dispatch display))
 
-                 ('timeout
-                  (wl-display-cancel-read display)))))
-
-           ;; Dispatch pending events
-           (wl-display-dispatch-pending display)
+               ('timeout
+                ;; Check for pending events
+                (when (not (zero? (wl-display-dispatch-pending display)))
+                  #t))))
            (loop)))
 
         (_
          (when (wfc-running? connection)
-           (loop))))))
+           (loop)))))))
 
 ;; Connect to Wayland and set up all fiber-based listeners
 (define (connect-wayland-fibers)
+  (format #t "Connecting to Wayland display~%")
   (let ((display (wl-display-connect)))
 
     (unless display
       (error "Failed to connect to Wayland display"))
 
-    ;; Create control channel
-    (let* ((control-channel (make-channel))
-           ;; Set up registry with fiber
-           (registry-context (setup-registry-fiber display))
-           ;; Create connection object
-           (connection (make-wayland-fiber-connection
-                        display registry-context control-channel
-                        #t #f)))
+    (format #t "Connected to display: ~a~%" display)
 
-      connection)))
+    ;; Create control channel
+    (let* ((control-channel (make-channel)))
+
+      ;; Set up registry with fiber - get both context and processor thunk
+      (format #t "About to setup registry fiber~%")
+      (call-with-values
+          (lambda () (setup-registry-fiber display))
+        (lambda (registry-context processor-thunk)
+
+          ;; Create connection object
+          (let ((connection (make-wayland-fiber-connection
+                             display registry-context control-channel
+                             #t #f #f)))
+
+            ;; Store the processor thunk for later
+            (set-wfc-registry-processor! connection processor-thunk)
+
+            (format #t "Connection object created~%")
+            connection))))))
 
 ;; Create window with fiber-based event handling
-(define (create-window-fibers conn title app-id width
-                              #:key
-                              (xdg-surface-configure-callback #f)
-                              (xdg-toplevel-configure-callback #f)
-                              (xdg-toplevel-close-callback #f))
+  (define* (create-window-fibers conn title app-id width
+                                 #:key
+                                 (xdg-surface-configure-callback #f)
+                                 (xdg-toplevel-configure-callback #f)
+                                 (xdg-toplevel-close-callback #f))
 
   ;; Get necessary globals
   (let ((compositor (get-global conn 'compositor))
@@ -161,6 +174,13 @@
 
 ;; Run the main event loop
 (define (run-event-loop-fibers conn)
+  (format #t "Starting event loop fibers~%")
+
+  ;; NOW spawn the registry processor fiber that we deferred
+  (when (wfc-registry-processor conn)
+    (format #t "Spawning registry processor fiber~%")
+    (spawn-fiber (wfc-registry-processor conn)))
+
   ;; Start the event dispatcher fiber
   (let ((dispatcher (spawn-fiber
                      (lambda ()

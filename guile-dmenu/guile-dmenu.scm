@@ -1,10 +1,12 @@
-(use-modules (guile-dmenu wayland)
+(use-modules (guile-dmenu wayland-fibers)
              (guile-dmenu memory-utils)
              (guile-dmenu graphics)
              (guile-dmenu keyboard)
              (guile-dmenu input)
              (wayland client protocol wayland)
              (wayland client protocol xdg-shell)
+             (fibers)
+             (fibers channels)
              (ice-9 match)
              (ice-9 rdelim))
 
@@ -13,6 +15,7 @@
 
 ;; Parameters to store important objects
 (define wayland-conn (make-parameter #f))
+(define surface* (make-parameter #f))
 (define width* (make-parameter 800))
 (define padding* (make-parameter 4))
 (define options* (make-parameter '()))
@@ -27,27 +30,24 @@
   (let ((height (* (+ 1 (min (length (filtered-options*)) (max-options*)))
                    (+ 14 (* 2 (padding*))))))
     (draw-menu (width*) height (padding*)
-               (wayland-connection-shm (wayland-conn))
+               (get-global (wayland-conn) 'shm)
                (prompt*) (input-text*)
                (selected-index*) (filtered-options*) (max-options*))))
 
 ;; Force a redraw of the window
 (define (redraw)
-  (when (wayland-conn)
-    (let ((surface (wayland-connection-surface (wayland-conn)))
-          (shm (wayland-connection-shm (wayland-conn))))
-      (when (and surface shm)
-        (let ((buffer (draw-frame)))
-          (wl-surface-attach surface buffer 0 0)
-          (wl-surface-damage surface 0 0 (width*) 1000)
-          (wl-surface-commit surface))))))
+  (when (and (wayland-conn) (surface*))
+    (let ((buffer (draw-frame)))
+      (wl-surface-attach (surface*) buffer 0 0)
+      (wl-surface-damage (surface*) 0 0 (width*) 1000)
+      (wl-surface-commit (surface*)))))
 
 ;; Read options from stdin
 (define (read-stdin)
   (let loop ((line (read-line)))
-      (unless (eof-object? line)
-        (options* (append (options*) (list line)))
-        (loop (read-line)))))
+    (unless (eof-object? line)
+      (options* (append (options*) (list line)))
+      (loop (read-line)))))
 
 ;; Our key handler that adapts to the keyboard module interface
 (define (handle-key key)
@@ -59,6 +59,20 @@
                         options*
                         max-options*)))
     (input-handler key (xkb-state))))
+
+;; XDG surface configure callback
+(define (xdg-surface-configure-callback xdg-surface serial)
+  (redraw))
+
+;; XDG toplevel configure callback
+(define (xdg-toplevel-configure-callback xdg width height states)
+  (unless (zero? width)
+    (width* width)))
+
+;; XDG toplevel close callback
+(define (xdg-toplevel-close-callback xdg-toplevel)
+  (shutdown-wayland-fibers (wayland-conn))
+  (exit 0))
 
 ;; Main function
 (define (main . args)
@@ -74,30 +88,31 @@
   ;; Set our key handler
   (set-key-handler! handle-key)
 
-  ;; Connect to Wayland display
-  (let ((conn (connect-wayland wl-seat-listener)))
-    (wayland-conn conn)
+  ;; Run with fibers - use explicit #:hz to disable preemption
+  (run-fibers
+   (lambda ()
+     ;; Connect to Wayland display using fibers
+     (let ((conn (connect-wayland-fibers)))
+       (wayland-conn conn)
 
-    ;; Create and configure window
-    (create-window
-     conn
-     "dmenu"
-     "wl-dmenu"
-     (width*)
+       ;; Create window with fiber-based event handling
+       (match (create-window-fibers
+               conn
+               "dmenu"
+               "wl-dmenu"
+               (width*)
+               #:xdg-surface-configure-callback xdg-surface-configure-callback
+               #:xdg-toplevel-configure-callback xdg-toplevel-configure-callback
+               #:xdg-toplevel-close-callback xdg-toplevel-close-callback)
+         ((surface xdg-surface xdg-toplevel
+                   xdg-surface-context xdg-toplevel-context)
+          ;; Store the surface
+          (surface* surface)
 
-     ;; XDG surface configure callback
-     (lambda (data xdg-surface serial)
-       (xdg-surface-ack-configure xdg-surface serial)
-       (redraw))
+          ;; Run the event loop
+          (run-event-loop-fibers conn)))
 
-     ;; XDG toplevel configure callback
-     (lambda (data xdg width height states)
-       (unless (zero? width)
-         (width* width)))
-
-     ;; XDG toplevel close callback
-     (lambda (data xdg-toplevel)
-       (exit 0)))
-
-    ;; Main event loop
-    (run-event-loop conn)))
+       ;; Clean shutdown
+       (shutdown-wayland-fibers conn)))
+   #:install-suspendable-ports? #f
+   #:hz 0))  ; Disable preemption to avoid continuation barrier issues
