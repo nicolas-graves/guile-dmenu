@@ -46,7 +46,8 @@
         (select-option (filtered-options) (selected-index)))
 
        ;; Down arrow - Move selection down
-       ((= keysym XKB_KEY_Down)
+       ((or (= keysym XKB_KEY_Down)
+            (and ctrl-pressed (= keysym XKB_KEY_n)))
         (let* ((current (selected-index))
                (new-idx (if (< (+ current 1) (length (filtered-options)))
                             (+ current 1)
@@ -55,7 +56,8 @@
           (on-change)))
 
        ;; Up arrow - Move selection up
-       ((= keysym XKB_KEY_Up)
+       ((or (= keysym XKB_KEY_Up)
+            (and ctrl-pressed (= keysym XKB_KEY_p)))
         (let* ((current (selected-index))
                (new-idx (if (> current 0) (- current 1) 0)))
           (selected-index new-idx)
