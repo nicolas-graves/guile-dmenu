@@ -5,13 +5,8 @@
              (guile-dmenu input)
              (wayland client protocol wayland)
              (wayland client protocol xdg-shell)
-             (oop goops)
-             (ice-9 format)
-             (ice-9 getopt-long)
              (ice-9 match)
-             (ice-9 rdelim)
-             (ice-9 textual-ports)
-             (rnrs bytevectors))
+             (ice-9 rdelim))
 
 ;; Prevent GC to avoid potential segment faults during drawing
 (gc-disable)
@@ -19,7 +14,7 @@
 ;; Parameters to store important objects
 (define wayland-conn (make-parameter #f))
 (define width* (make-parameter 800))
-(define padding* (make-parameter 8))
+(define padding* (make-parameter 4))
 (define options* (make-parameter '()))
 (define max-options* (make-parameter 10))
 (define prompt* (make-parameter "dmenu: "))
