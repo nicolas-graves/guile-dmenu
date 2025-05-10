@@ -49,10 +49,19 @@
                               (make-channel)      ; configure
                               configure-callback)))
 
+    (format #t "XDG Surface context created~%")
+
     ;; Add the XDG surface listener
-    (xdg-surface-add-listener xdg-surface (create-fiber-xdg-surface-listener xdg-surface-context))
+    (xdg-surface-add-listener
+     xdg-surface
+     (create-fiber-xdg-surface-listener xdg-surface-context))
+
+    (format #t "XDG Surface listener added~%")
 
     ;; Start the XDG surface event processor fiber
-    (xdg-surface-event-processor xdg-surface-context)
+    (spawn-fiber (xdg-surface-event-processor xdg-surface-context))
+    (sleep 0.01)
+
+    (format #t "XDG Surface processor fiber added~%")
 
     xdg-surface-context))

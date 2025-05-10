@@ -78,10 +78,15 @@
                                close-callback)))
 
     ;; Add the XDG toplevel listener
-    (xdg-toplevel-add-listener xdg-toplevel
-                               (create-fiber-xdg-toplevel-listener xdg-toplevel-context))
+    (xdg-toplevel-add-listener
+     xdg-toplevel
+     (create-fiber-xdg-toplevel-listener xdg-toplevel-context))
 
+    (format #t "About to start the XDG Toplevel processor~%")
     ;; Start the XDG toplevel event processor fiber
-    (xdg-toplevel-event-processor xdg-toplevel-context)
+    (spawn-fiber (xdg-toplevel-event-processor xdg-toplevel-context))
+    (sleep 0.01)
+
+    (format #t "XDG Toplevel processor fiber added~%")
 
     xdg-toplevel-context))

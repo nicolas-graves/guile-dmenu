@@ -84,10 +84,18 @@
                        (make-channel)  ; pointer
                        (make-channel))))  ; touch
 
+    (format #t "Seat context created~%")
+
     ;; Add the seat listener
     (wl-seat-add-listener seat (create-fiber-seat-listener seat-context))
 
+    (format #t "About to add seat listener~%")
+
+    (spawn-fiber (seat-event-processor seat-context))
+    (sleep 0.01)
+
+    (format #t "Seat listener added~%")
+
     ;; Start the seat event processor fiber
-    (seat-event-processor seat-context)
 
     seat-context))
