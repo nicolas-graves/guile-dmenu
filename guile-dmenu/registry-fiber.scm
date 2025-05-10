@@ -20,11 +20,11 @@
    global-channel
    global-remove-channel
    spawn-channel
-   globals)  ; Hash table to store global objects
+   globals)
   registry-fiber-context?
   (global-channel registry-global-channel)
   (global-remove-channel registry-global-remove-channel)
-  (spawn-channel registry-spawn-channel)  ; Channel for deferred fiber spawning
+  (spawn-channel registry-spawn-channel)
   (globals registry-globals))
 
 ;; Create a fiber-based registry listener
@@ -84,9 +84,8 @@
 
     (_ #t)))
 
-;; Fiber to process registry events - returns a thunk to be spawned later
+;; Fiber to process registry events
 (define (registry-event-processor registry-context)
-  (format #t "Creating registry event processor thunk~%")
   (lambda ()
     (format #t "Registry event processor fiber started~%")
     (let loop ()
@@ -119,7 +118,6 @@
 
       (loop))))
 
-;; Complete setup function - returns context and processor thunk
 (define (setup-registry-fiber display)
   (format #t "Setting up registry fiber~%")
   (let ((registry (wl-display-get-registry display))
@@ -136,15 +134,16 @@
 
     (format #t "Registry listener added~%")
 
-    ;; Create the processor thunk but don't spawn it yet
-    (let ((processor-thunk (registry-event-processor registry-context)))
+    ;; START THE PROCESSOR FIBER BEFORE THE ROUNDTRIP!
+    ;; spawn-fiber might return #<unspecified> or nothing, so don't bind it
+    (spawn-fiber (registry-event-processor registry-context))
+    (sleep 0.01)
 
-      (format #t "Doing initial roundtrip~%")
+    (format #t "Processor fiber started, doing roundtrip~%")
 
-      ;; Do initial roundtrip to get globals
-      (wl-display-roundtrip display)
+    ;; Now the processor is running and can receive messages
+    (wl-display-roundtrip display)
 
-      (format #t "Roundtrip complete~%")
+    (format #t "Roundtrip complete~%")
 
-      ;; Return both the context and the processor thunk using values
-      (values registry-context processor-thunk))))
+    registry-context))
