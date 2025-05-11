@@ -121,7 +121,8 @@
               ;; (wl-display-flush display)
               (pk 'wayland-dispatch-loop)
 
-              (loop)))))
+              (loop)))
+          #t))
 
        (let loop ()
          (pk 'main-loop)

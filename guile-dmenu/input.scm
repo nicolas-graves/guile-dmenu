@@ -84,6 +84,7 @@
                      (input-text (pk 'input (string-append current-text (string char))))
                      (filtered-options (filter-options (options) (input-text)))
                      (selected-index 0)
-                     (on-change)))))))))
+                     (on-change))))))
+        #t)))
     (pk 'ih)
     #t))

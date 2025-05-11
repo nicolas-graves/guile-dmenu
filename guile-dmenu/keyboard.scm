@@ -95,45 +95,8 @@
 (define key-handler (make-parameter #f))
 
 ;; Handle keyboard key events
-(define (handle-key-internal key state)
-  (if (and (= state 1) (key-handler)) ; Key pressed and handler set
-      ((key-handler) key)
-      #f))
-
-;; Original keyboard listener (non-fiber version)
-(define wl-keyboard-listener
-  (make <wl-keyboard-listener>
-    #:keymap
-    (lambda (data keyboard format fd size)
-      (process-keymap format fd size)
-      (close-fdes fd))
-
-    #:enter
-    (lambda (data keyboard serial surface keys)
-      #t)
-
-    #:leave
-    (lambda (data keyboard serial surface)
-      #t)
-
-    #:key
-    (lambda (data keyboard serial time key state)
-      (handle-key-internal key state))
-
-    #:modifiers
-    (lambda (data keyboard serial mods-depressed mods-latched mods-locked group)
-      ;; Update the XKB state with the current modifier state
-      (when (xkb-state)
-        (xkb-state-update-mask (xkb-state)
-                              mods-depressed
-                              mods-latched
-                              mods-locked
-                              0 0 group))
-      #t)
-
-    #:repeat-info
-    (lambda (data keyboard rate delay)
-      #t)))
+(define (handle-key-internal key)
+  (pk 'handled key (and (key-handler) ((key-handler) key))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
@@ -210,40 +173,39 @@
 (define (key-processor-fiber)
   (let loop ()
     (match (get-message (key-event-channel))
-      (('key key state time)
-       (cond
-         ((= state 1)  ; Key pressed
-          ;; Cancel any existing repeat for this key
-          (when (hash-ref active-repeats key)
-            (hash-set! active-repeats key 'cancelled))
+      (('key key 1 time)
+       ;; Cancel any existing repeat for this key
+       (when (hash-ref active-repeats key)
+         (hash-set! active-repeats key 'cancelled))
 
-          ;; Handle initial press
-          (handle-key-internal key state)
+       ;; Handle initial press
+       (handle-key-internal key)
 
-          ;; Start repeat fiber
-          (let ((repeat-fiber
-                 (spawn-fiber
-                  (lambda ()
-                    ;; Initial delay
-                    (sleep initial-delay)
+       ;; Start repeat fiber
+       (let ((repeat-fiber
+              (spawn-fiber
+               (lambda ()
+                 ;; Initial delay
+                 (sleep initial-delay)
 
-                    ;; Check if we've been cancelled
-                    (unless (eq? (hash-ref active-repeats key) 'cancelled)
-                      ;; Repeat loop
-                      (let repeat-loop ()
-                        (unless (eq? (hash-ref active-repeats key) 'cancelled)
-                          (handle-key-internal key 1)  ; Always send as key press
-                          (sleep repeat-delay)
-                          (repeat-loop))))))))
+                 ;; Check if we've been cancelled
+                 (unless (eq? (hash-ref active-repeats key) 'cancelled)
+                   ;; Repeat loop
+                   (let repeat-loop ()
+                     (unless (eq? (hash-ref active-repeats key) 'cancelled)
+                       (handle-key-internal key)  ; Always send as key press
+                       (sleep repeat-delay)
+                       (repeat-loop))
+                     #t))
+                 #t))))
 
-            ;; Store the fiber reference
-            (hash-set! active-repeats key repeat-fiber)))
-
-         ((= state 0)  ; Key released
-          ;; Mark as cancelled
-          (when (hash-ref active-repeats key)
-            (hash-set! active-repeats key 'cancelled)
-            (hash-remove! active-repeats key)))))
+         ;; Store the fiber reference
+         (hash-set! active-repeats key repeat-fiber)))
+      (('key key 0 time)
+       ;; Mark as cancelled
+       (when (hash-ref active-repeats key)
+         (hash-set! active-repeats key 'cancelled)
+         (hash-remove! active-repeats key)))
 
       (('modifiers mods-depressed mods-latched mods-locked group)
        ;; Update XKB state if available
