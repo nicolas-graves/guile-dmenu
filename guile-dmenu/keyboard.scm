@@ -38,7 +38,6 @@
 
 ;; Fiber-related state
 (define key-event-channel (make-parameter #f))
-(define active-repeats (make-hash-table))
 
 ;; Key repeat configuration
 (define initial-delay 0.5)
@@ -118,21 +117,22 @@
       (log "Key event: key=~a state=~a~%" key state)
       ;; (log "Channel exists: ~a~%" (key-event-channel))
 
+      (put-message (key-event-channel) `(key ,key ,state ,time))
       ;; Try to spawn fiber
-      (catch #t
-        (lambda ()
-          (log "Attempting to spawn fiber for key event...~%")
-          (spawn-fiber
-           (lambda ()
-             (log "Inside spawned fiber for key ~a~%" key)
-             (log "Attempting put-message...~%")
-             (put-message (key-event-channel) `(key ,key ,state ,time))
-             (log "Message put successfully for key ~a~%" key)
-             #t))
-          (log "Fiber spawned successfully~%")
-          #t)
-        (lambda (key . args)
-          (log "ERROR spawning fiber: ~a ~a~%" key args)))
+      ;; (catch #t
+      ;;   (lambda ()
+      ;;     (log "Attempting to spawn fiber for key event...~%")
+      ;;     (spawn-fiber
+      ;;      (lambda ()
+      ;;        (log "Inside spawned fiber for key ~a~%" key)
+      ;;        (log "Attempting put-message...~%")
+      ;;        (put-message (key-event-channel) `(key ,key ,state ,time))
+      ;;        (log "Message put successfully for key ~a~%" key)
+      ;;        #t))
+      ;;     (log "Fiber spawned successfully~%")
+      ;;     #t)
+      ;;   (lambda (key . args)
+      ;;     (log "ERROR spawning fiber: ~a ~a~%" key args)))
       #t)
 
     #:modifiers
@@ -168,55 +168,30 @@
 (define (set-key-handler! handler)
   (key-handler handler))
 
-;; Process keyboard events from the channel
 (define (key-processor-fiber)
   (let loop ()
     (match (get-message (key-event-channel))
-      (('key key 1 time)
-       ;; Cancel any existing repeat for this key
-       (when (hash-ref active-repeats key)
-         (hash-set! active-repeats key 'cancelled))
+      (('key key 1 time)  ; Key pressed
+       (handle-key-internal key))
 
-       ;; Handle initial press
-       (handle-key-internal key)
-
-       ;; Start repeat fiber
-       (let ((repeat-fiber
-              (spawn-fiber
-               (lambda ()
-                 ;; Initial delay
-                 (sleep initial-delay)
-
-                 ;; Check if we've been cancelled
-                 (unless (eq? (hash-ref active-repeats key) 'cancelled)
-                   ;; Repeat loop
-                   (let repeat-loop ()
-                     (unless (eq? (hash-ref active-repeats key) 'cancelled)
-                       (handle-key-internal key)  ; Always send as key press
-                       (sleep repeat-delay)
-                       (repeat-loop))
-                     #t))
-                 #t))))
-
-         ;; Store the fiber reference
-         (hash-set! active-repeats key repeat-fiber)))
-      (('key key 0 time)
-       ;; Mark as cancelled
-       (when (hash-ref active-repeats key)
-         (hash-set! active-repeats key 'cancelled)
-         (hash-remove! active-repeats key)))
+      (('key key 0 time)  ; Key released
+       ;; Later: cancel repeat if it's for this key
+       )
 
       (('modifiers mods-depressed mods-latched mods-locked group)
        ;; Update XKB state if available
        (when (xkb-state)
          (xkb-state-update-mask (xkb-state)
-                               mods-depressed
-                               mods-latched
-                               mods-locked
-                               0 0 group))))
+                                mods-depressed
+                                mods-latched
+                                mods-locked
+                                0 0 group))))
+
     (pk 'key-processor-loop)
     (loop))
   #t)
+
+;; Process keyboard events from the channel
 
 ;; Start the key processor fiber
 (define (start-key-processor-fiber)
