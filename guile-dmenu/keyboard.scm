@@ -45,9 +45,8 @@
 (define repeat-delay 0.05)
 
 ;; Initialize fiber support for keyboard
-(define (initialize-keyboard-fibers exit-channel-parameter)
-  (key-event-channel (make-channel))
-  (exit-channel-parameter (make-channel)))
+(define (initialize-keyboard-fibers)
+  (key-event-channel (make-channel)))
 
 ;; Process a keymap received from the compositor
 (define (process-keymap format fd size)

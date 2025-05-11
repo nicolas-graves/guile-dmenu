@@ -81,7 +81,8 @@
 
   (run-fibers
    (lambda ()
-     (initialize-keyboard-fibers exit-channel*)
+     (exit-channel* (make-channel))
+     (initialize-keyboard-fibers)
      (start-key-processor-fiber)
 
      ;; Connect to Wayland display with fiber-aware seat listener
