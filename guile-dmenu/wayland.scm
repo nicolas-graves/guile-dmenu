@@ -142,4 +142,4 @@
 ;; Run the main event loop
 (define (run-event-loop conn)
   (while (not (zero? (wl-display-dispatch (wayland-connection-display conn))))
-    #t))
+    (usleep 1)))

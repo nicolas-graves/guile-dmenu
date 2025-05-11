@@ -4,8 +4,7 @@
   #:use-module (xkbcommon xkbcommon)
   #:use-module (xkbcommon keysyms)
   #:export (make-input-handler
-            filter-options
-            select-option))
+            filter-options))
 
 ;; Filter options based on input text
 (define (filter-options options input)
@@ -16,17 +15,10 @@
          (string-contains-ci opt input))
        options)))
 
-;; Select option and exit with result
-(define (select-option filtered-options selected-index)
-  (when (and (not (null? filtered-options))
-             (< selected-index (length filtered-options)))
-    (let ((selected (list-ref filtered-options selected-index)))
-      (format #t "~a~%" selected)
-      (exit 0))))
-
 ;; Create an input handler function
 (define (make-input-handler on-change input-text selected-index
-                            filtered-options options max-options)
+                            filtered-options options max-options
+                            request-exit-with)
   (lambda (key xkb-state)
     (let* ((xkb-key (+ 8 key))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
@@ -39,11 +31,17 @@
        ;; ESC/Ctrl+g/c - Exit program
        ((or (= keysym XKB_KEY_Escape)
             (and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g))))
-        (exit 1))
+        (request-exit-with 1)
+        #t)
 
        ;; Enter - Select current option
        ((= keysym XKB_KEY_Return)
-        (select-option (filtered-options) (selected-index)))
+        (when (and (not (null? (filtered-options)))
+                   (< (selected-index) (length (filtered-options))))
+          (let ((selected (list-ref (filtered-options) (selected-index))))
+            (format #t "~a~%" selected)
+            (request-exit-with 0)
+            #t)))
 
        ;; Down arrow - Move selection down
        ((or (= keysym XKB_KEY_Down)
@@ -53,7 +51,8 @@
                             (+ current 1)
                             current)))
           (selected-index new-idx)
-          (on-change)))
+          (on-change))
+        #t)
 
        ;; Up arrow - Move selection up
        ((or (= keysym XKB_KEY_Up)
@@ -85,4 +84,6 @@
                      (input-text (pk 'input (string-append current-text (string char))))
                      (filtered-options (filter-options (options) (input-text)))
                      (selected-index 0)
-                     (on-change)))))))))))
+                     (on-change)))))))))
+    (pk 'ih)
+    #t))

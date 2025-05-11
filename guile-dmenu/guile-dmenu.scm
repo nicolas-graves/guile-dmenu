@@ -3,10 +3,18 @@
              (guile-dmenu graphics)
              (guile-dmenu keyboard)
              (guile-dmenu input)
+             (wayland client display)
              (wayland client protocol wayland)
              (wayland client protocol xdg-shell)
              (ice-9 match)
-             (ice-9 rdelim))
+             (ice-9 rdelim)
+             (fibers)
+             (fibers channels)
+             (fibers io-wakeup)
+             (fibers operations)
+             (fibers timers)
+             (srfi srfi-2)
+             )
 
 ;; Prevent GC to avoid potential segment faults during drawing
 (gc-disable)
@@ -21,6 +29,7 @@
 (define selected-index* (make-parameter 0))
 (define input-text* (make-parameter ""))
 (define filtered-options* (make-parameter '()))
+(define exit-channel* (make-parameter #f))
 
 ;; Draw the menu using the graphics module
 (define (draw-frame)
@@ -29,18 +38,18 @@
     (draw-menu (width*) height (padding*)
                (wayland-connection-shm (wayland-conn))
                (prompt*) (input-text*)
-               (selected-index*) (filtered-options*) (max-options*))))
+               (selected-index*) (filtered-options*) (max-options*))
+    ))
 
 ;; Force a redraw of the window
 (define (redraw)
-  (when (wayland-conn)
-    (let ((surface (wayland-connection-surface (wayland-conn)))
-          (shm (wayland-connection-shm (wayland-conn))))
-      (when (and surface shm)
-        (let ((buffer (draw-frame)))
-          (wl-surface-attach surface buffer 0 0)
-          (wl-surface-damage surface 0 0 (width*) 1000)
-          (wl-surface-commit surface))))))
+  (and-let* ((surface (and=> (wayland-conn) wayland-connection-surface))
+             (shm (wayland-connection-shm (wayland-conn)))
+             (buffer (draw-frame)))
+    (wl-surface-attach surface buffer 0 0)
+    (wl-surface-damage surface 0 0 (width*) 1000)
+    (wl-surface-commit surface)
+    #t))
 
 ;; Read options from stdin
 (define (read-stdin)
@@ -57,47 +66,76 @@
                         selected-index*
                         filtered-options*
                         options*
-                        max-options*)))
-    (input-handler key (xkb-state))))
+                        max-options*
+                        (lambda (code)
+                          (put-message (exit-channel*) code)
+                          #t))))
+    (input-handler key (xkb-state))
+    #t))
 
-;; Main function
 (define (main . args)
-  ;; Read options from stdin
   (read-stdin)
-
-  ;; Initialize filtered options
   (filtered-options* (options*))
-
-  ;; Initialize XKB for keyboard handling
   (initialize-fallback-keymap)
-
-  ;; Set our key handler
   (set-key-handler! handle-key)
 
-  ;; Connect to Wayland display
-  (let ((conn (connect-wayland wl-seat-listener)))
-    (wayland-conn conn)
+  (run-fibers
+   (lambda ()
+     (initialize-keyboard-fibers exit-channel*)
+     (start-key-processor-fiber)
 
-    ;; Create and configure window
-    (create-window
-     conn
-     "dmenu"
-     "wl-dmenu"
-     (width*)
+     ;; Connect to Wayland display with fiber-aware seat listener
+     (let ((conn (connect-wayland wl-seat-listener-with-fibers)))
+       (wayland-conn conn)
 
-     ;; XDG surface configure callback
-     (lambda (data xdg-surface serial)
-       (xdg-surface-ack-configure xdg-surface serial)
-       (redraw))
+       ;; Create and configure window
+       (create-window
+        conn
+        "dmenu"
+        "wl-dmenu"
+        (width*)
 
-     ;; XDG toplevel configure callback
-     (lambda (data xdg width height states)
-       (unless (zero? width)
-         (width* width)))
+        ;; XDG surface configure callback
+        (lambda (data xdg-surface serial)
+          (xdg-surface-ack-configure xdg-surface serial)
+          (redraw)
+          #t)
 
-     ;; XDG toplevel close callback
-     (lambda (data xdg-toplevel)
-       (exit 0)))
+        ;; XDG toplevel configure callback
+        (lambda (data xdg width height states)
+          (unless (zero? width)
+            (width* width))
+          #t)
 
-    ;; Main event loop
-    (run-event-loop conn)))
+        ;; XDG toplevel close callback
+        (lambda (data xdg-toplevel)
+          (exit 0)))
+
+       (spawn-fiber
+        (lambda ()
+          (let ((display (wayland-connection-display conn)))
+            (let loop ()
+              (sleep 0.01)
+              ;; Dispatch any pending events
+              (wl-display-dispatch display)
+              ;; (wl-display-flush display)
+              (pk 'wayland-dispatch-loop)
+
+              (loop)))))
+
+       (let loop ()
+         (pk 'main-loop)
+         (perform-operation
+          (choice-operation
+           (wrap-operation (get-operation (exit-channel*))
+                           (lambda (exit-code)
+                             (format (current-error-port) "Exiting with code: ~a~%" exit-code)
+                             (primitive-exit exit-code)))
+           (wrap-operation (sleep-operation 0.1)
+                           (lambda () (loop))))))
+       ;; Main event loop
+       ;; (run-event-loop conn)
+       ))
+
+   ;; Ensure all fibers complete before exit
+   #:drain? #t))
