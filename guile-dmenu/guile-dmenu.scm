@@ -17,7 +17,7 @@
 ;; Prevent GC to avoid potential segment faults during drawing
 (gc-disable)
 
-;; Parameters to store important objects
+;; Parameters to store important state
 (define width* (make-parameter 800))
 (define padding* (make-parameter 4))
 (define options* (make-parameter '()))
@@ -26,9 +26,6 @@
 (define selected-index* (make-parameter 0))
 (define input-text* (make-parameter ""))
 (define filtered-options* (make-parameter '()))
-(define exit-channel* (make-parameter #f))
-(define filter-channel* (make-parameter #f))
-(define wayland-channel* (make-parameter #f))  ;; New channel for Wayland commands
 
 ;; Draw the menu using the graphics module
 (define (draw-frame shm)
@@ -38,21 +35,14 @@
                shm (prompt*) (input-text*)
                (selected-index*) (filtered-options*) (max-options*))))
 
-;; Request a redraw through the Wayland command channel
-(define (request-redraw)
-  (put-message (wayland-channel*) 'redraw)
-  #t)
-
-;; Perform the actual redraw (called only from Wayland event loop fiber)
+;; Perform the actual redraw
 (define (do-redraw connection)
   (and-let* ((surface (and=> connection wayland-connection-surface))
              (shm (wayland-connection-shm connection))
              (buffer (draw-frame shm)))
-    (pk 'buffer-found)
     (wl-surface-attach surface buffer 0 0)
     (wl-surface-damage surface 0 0 (width*) 1000)
     (wl-surface-commit surface)
-    (pk 'redraw)
     #t))
 
 ;; Read options from stdin
@@ -62,22 +52,6 @@
       (options* (append (options*) (list line)))
       (loop (read-line)))))
 
-;; Our key handler that adapts to the keyboard module interface
-(define (handle-key key)
-  (let ((input-handler (make-input-handler
-                        request-redraw
-                        input-text*
-                        selected-index*
-                        filtered-options*
-                        options*
-                        max-options*
-                        (lambda (code)
-                          (put-message (exit-channel*) code)
-                          #t)
-                        filter-channel*)))
-    (input-handler key (xkb-state))
-    #t))
-
 (define (main . args)
   (read-stdin)
   (filtered-options* (options*))
@@ -85,84 +59,112 @@
 
   (run-fibers
    (lambda ()
-     (exit-channel* (make-channel))
-     (filter-channel* (make-channel))
-     (wayland-channel* (make-channel))
-     (initialize-keyboard-fibers)
-     (set-key-handler! handle-key)
-     (start-key-processor-fiber)
+     ;; Create channels
+     (let ((exit-channel (make-channel))
+           (state-channel (make-channel))
+           (wayland-channel (make-channel)))
 
-     ;; Connect to Wayland display with fiber-aware seat listener
-     (let ((conn (connect-wayland wl-seat-listener-with-fibers)))
-       (spawn-fiber
-        (lambda ()
-          (let ((display (wayland-connection-display conn)))
-            (let loop ()
-              ;; Check for Wayland commands with a short timeout
-              (let ((op (choice-operation
-                         (get-operation (wayland-channel*))
-                         (wrap-operation (sleep-operation 0.001)
-                                         (lambda () 'timeout)))))
-                (match (perform-operation op)
-                  ('redraw
-                   (do-redraw conn)
-                   (wl-display-flush display))
-                  ('timeout  ;; timeout occurred
-                   ;; Process Wayland events
-                   (wl-display-dispatch display))
-                  (other
-                   (pk 'other other)
-                   ;; Handle unexpected values
-                   #t)))
-              (loop)))
-          #t))
+       (initialize-keyboard-fibers)
 
+       ;; Set up key decoder with direct state and exit channels
+       (set-key-handler! (make-key-decoder state-channel exit-channel))
+       (start-key-processor-fiber)
+
+       ;; State processing fiber - handles all state updates
        (spawn-fiber
         (lambda ()
           (let loop ()
-            (match (get-message (filter-channel*))
-              (('filter text)
-               ;; Do the filtering work
-               (filtered-options* (pk 'f (filter-options (options*) text)))
-               (selected-index* 0)
-               ;; (request-redraw)
-               (do-redraw conn)
-               #t)
+            (match (get-message state-channel)
+              ('select
+               (when (and (not (null? (filtered-options*)))
+                          (< (selected-index*) (length (filtered-options*))))
+                 (let ((selected (list-ref (filtered-options*) (selected-index*))))
+                   (format #t "~a~%" selected)
+                   (put-message exit-channel 0))))
+
+              ('move-down
+               (let* ((current (selected-index*))
+                      (new-idx (if (< (+ current 1) (length (filtered-options*)))
+                                   (+ current 1)
+                                   current)))
+                 (selected-index* new-idx)
+                 (put-message wayland-channel 'redraw)))
+
+              ('move-up
+               (let* ((current (selected-index*))
+                      (new-idx (if (> current 0) (- current 1) 0)))
+                 (selected-index* new-idx)
+                 (put-message wayland-channel 'redraw)))
+
+              ('backspace
+               (let ((current-text (input-text*)))
+                 (unless (string-null? current-text)
+                   (let ((new-text (string-drop-right current-text 1)))
+                     (input-text* (pk 'i new-text))
+                     (filtered-options* (filter-options (options*) new-text))
+                     (selected-index* 0)
+                     (put-message wayland-channel 'redraw)))))
+
+              (('input-char char)
+               (let* ((current-text (input-text*))
+                      (new-text (string-append current-text (string char))))
+                 (input-text* (pk 'i new-text))
+                 (filtered-options* (filter-options (options*) new-text))
+                 (selected-index* 0)
+                 (put-message wayland-channel 'redraw)))
+
               (_ #t))
-            (loop))
-          #t))
+            (loop))))
 
-       ;; Create and configure window
-       (create-window
-        conn
-        "dmenu"
-        "wl-dmenu"
-        (width*)
+       ;; Connect to Wayland display
+       (let ((conn (connect-wayland wl-seat-listener-with-fibers)))
 
-        ;; XDG surface configure callback
-        (lambda (data xdg-surface serial)
-          (xdg-surface-ack-configure xdg-surface serial)
-          (do-redraw conn)
-          #t)
+         ;; Wayland event loop fiber
+         (spawn-fiber
+          (lambda ()
+            (let ((display (wayland-connection-display conn)))
+              (let loop ()
+                (let ((op (choice-operation
+                           (get-operation wayland-channel)
+                           (wrap-operation (sleep-operation 0.001)
+                                           (lambda () 'timeout)))))
+                  (match (perform-operation op)
+                    ('redraw
+                     (do-redraw conn)
+                     (wl-display-flush display))
+                    ('timeout
+                     (wl-display-dispatch display))
+                    (_ #t)))
+                (loop))
+              #t)))
 
-        ;; XDG toplevel configure callback
-        (lambda (data xdg width height states)
-          (unless (zero? width)
-            (width* width))
-          #t)
+         ;; Create and configure window
+         (create-window
+          conn
+          "dmenu"
+          "wl-dmenu"
+          (width*)
 
-        ;; XDG toplevel close callback
-        (lambda (data xdg-toplevel)
-          (exit 0)))
+          ;; XDG surface configure callback
+          (lambda (data xdg-surface serial)
+            (xdg-surface-ack-configure xdg-surface serial)
+            (do-redraw conn)
+            #t)
 
-       ;; Single Wayland event loop fiber that handles everything
+          ;; XDG toplevel configure callback
+          (lambda (data xdg width height states)
+            (unless (zero? width)
+              (width* width))
+            #t)
 
+          ;; XDG toplevel close callback
+          (lambda (data xdg-toplevel)
+            (exit 0)))
 
-       ;; Main exit handling loop
-       (let loop ()
-         (let ((exit-code (get-message (exit-channel*))))
-           (format (current-error-port) "Exiting with code: ~a~%" exit-code)
-           (primitive-exit exit-code)))))
+         ;; Exit handling loop
+         (let loop ()
+           (let ((exit-code (get-message exit-channel)))
+             (format (current-error-port) "Exiting with code: ~a~%" exit-code)
+             (primitive-exit exit-code))))))
 
-   ;; Ensure all fibers complete before exit
    #:drain? #t))

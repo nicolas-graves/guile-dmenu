@@ -92,9 +92,10 @@
 ;; Define a dynamic variable to store key handler
 (define key-handler (make-parameter #f))
 
-;; Handle keyboard key events
+;; Handle keyboard key events - keep the original signature
 (define (handle-key-internal key)
-  (pk 'handled key (and (key-handler) ((key-handler) key))))
+  ;; Call the handler with both key and xkb-state
+  (pk 'handled key (and (key-handler) ((key-handler) key (xkb-state)))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
@@ -115,24 +116,11 @@
     #:key
     (lambda (data keyboard serial time key state)
       (log "Key event: key=~a state=~a~%" key state)
-      ;; (log "Channel exists: ~a~%" (key-event-channel))
-
-      (put-message (key-event-channel) `(key ,key ,state ,time))
-      ;; Try to spawn fiber
-      ;; (catch #t
-      ;;   (lambda ()
-      ;;     (log "Attempting to spawn fiber for key event...~%")
-      ;;     (spawn-fiber
-      ;;      (lambda ()
-      ;;        (log "Inside spawned fiber for key ~a~%" key)
-      ;;        (log "Attempting put-message...~%")
-      ;;        (put-message (key-event-channel) `(key ,key ,state ,time))
-      ;;        (log "Message put successfully for key ~a~%" key)
-      ;;        #t))
-      ;;     (log "Fiber spawned successfully~%")
-      ;;     #t)
-      ;;   (lambda (key . args)
-      ;;     (log "ERROR spawning fiber: ~a ~a~%" key args)))
+      ;; We can't use put-message directly here due to continuation barrier
+      ;; Instead, spawn a fiber to do it
+      (spawn-fiber
+       (lambda ()
+         (put-message (key-event-channel) `(key ,key ,state ,time))))
       #t)
 
     #:modifiers
@@ -141,8 +129,7 @@
       (spawn-fiber
        (lambda ()
          (put-message (key-event-channel)
-                      `(modifiers ,mods-depressed ,mods-latched ,mods-locked ,group))
-         #t))
+                      `(modifiers ,mods-depressed ,mods-latched ,mods-locked ,group))))
       #t)
 
     #:repeat-info
@@ -192,8 +179,6 @@
     (pk 'key-processor-loop)
     (loop))
   #t)
-
-;; Process keyboard events from the channel
 
 ;; Start the key processor fiber
 (define (start-key-processor-fiber)

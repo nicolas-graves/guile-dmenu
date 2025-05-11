@@ -4,7 +4,8 @@
   #:use-module (xkbcommon xkbcommon)
   #:use-module (xkbcommon keysyms)
   #:use-module (fibers channels)
-  #:export (make-input-handler
+  #:use-module (fibers)
+  #:export (make-key-decoder
             filter-options))
 
 ;; Filter options based on input text
@@ -16,9 +17,7 @@
          (string-contains-ci opt input))
        options)))
 
-(define (make-input-handler on-change input-text selected-index
-                            filtered-options options max-options
-                            request-exit-with filter-channel)
+(define (make-key-decoder state-channel exit-channel)
   (lambda (key xkb-state)
     (let* ((xkb-key (+ 8 key))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
@@ -27,63 +26,35 @@
                                               "Control"
                                               XKB_STATE_MODS_EFFECTIVE)
                                              1)))))
+
       (cond
        ;; ESC/Ctrl+g/c - Exit program
        ((or (= keysym XKB_KEY_Escape)
             (and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g))))
-        (request-exit-with 1)
-        #t)
+        (put-message exit-channel 1))
 
        ;; Enter - Select current option
        ((= keysym XKB_KEY_Return)
-        (when (and (not (null? (filtered-options)))
-                   (< (selected-index) (length (filtered-options))))
-          (let ((selected (list-ref (filtered-options) (selected-index))))
-            (format #t "~a~%" selected)
-            (request-exit-with 0)
-            #t)))
+        (put-message state-channel 'select))
 
-       ;; Down arrow - Move selection down
+       ;; Down arrow/Ctrl+n - Move selection down
        ((or (= keysym XKB_KEY_Down)
             (and ctrl-pressed (= keysym XKB_KEY_n)))
-        (let* ((current (selected-index))
-               (new-idx (if (< (+ current 1) (length (filtered-options)))
-                            (+ current 1)
-                            current)))
-          (selected-index new-idx)
-          (on-change))
-        #t)
+        (put-message state-channel 'move-down))
 
-       ;; Up arrow - Move selection up
+       ;; Up arrow/Ctrl+p - Move selection up
        ((or (= keysym XKB_KEY_Up)
             (and ctrl-pressed (= keysym XKB_KEY_p)))
-        (let* ((current (selected-index))
-               (new-idx (if (> current 0) (- current 1) 0)))
-          (selected-index new-idx)
-          (on-change)))
+        (put-message state-channel 'move-up))
 
-       ;; Backspace - Delete last character and request filtering
+       ;; Backspace - Delete last character
        ((= keysym XKB_KEY_BackSpace)
-        (let ((current-text (input-text)))
-          (unless (string-null? current-text)
-            (let ((new-text (string-drop-right current-text 1)))
-              (input-text (pk 'i new-text))
-              (put-message (filter-channel) `(filter ,new-text)))))
-        #t)
+        (put-message state-channel 'backspace))
 
-       ;; Character input - Add character and request filtering
+       ;; Character input - Add character
        (else
         (unless ctrl-pressed
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
-            ;; Conveniently special characters have their utf32 equal to 0.
-            (cond ((= utf32 0)
-                   (pk 'unhandled-keysym (number->string keysym 16)))
-                  ;; Regular character input
-                  ((and (> utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
-                   (let* ((char (integer->char utf32))
-                          (current-text (input-text))
-                          (new-text (string-append current-text (string char))))
-                     (input-text (pk 'i new-text))
-                     (put-message (filter-channel) `(filter ,new-text)))))))
-        #t)))
-    #t))
+            (when (and (> utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
+              (put-message state-channel `(input-char ,(integer->char utf32))))))))
+      #t)))
