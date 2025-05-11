@@ -10,7 +10,6 @@
              (ice-9 rdelim)
              (fibers)
              (fibers channels)
-             (fibers io-wakeup)
              (fibers operations)
              (fibers timers)
              (srfi srfi-2)
@@ -31,6 +30,7 @@
 (define filtered-options* (make-parameter '()))
 (define exit-channel* (make-parameter #f))
 (define filter-channel* (make-parameter #f))
+(define redraw-channel* (make-parameter #f))
 
 ;; Draw the menu using the graphics module
 (define (draw-frame)
@@ -44,12 +44,19 @@
 
 ;; Force a redraw of the window
 (define (redraw)
+  (pk 'redraw-attempt (and (wayland-conn) #t))
   (and-let* ((surface (and=> (wayland-conn) wayland-connection-surface))
              (shm (wayland-connection-shm (wayland-conn)))
              (buffer (draw-frame)))
+    ;; Flush pending events before drawing
+    (wl-display-flush (and=> (wayland-conn) wayland-connection-display))
+    ;; (wl-display-flush display)
     (wl-surface-attach surface buffer 0 0)
     (wl-surface-damage surface 0 0 (width*) 1000)
     (wl-surface-commit surface)
+    ;; Flush after committing changes
+    (wl-display-flush (and=> (wayland-conn) wayland-connection-display))
+    (wl-display-roundtrip (and=> (wayland-conn) wayland-connection-display))
     (pk 'redraw)
     #t))
 
@@ -60,13 +67,15 @@
         (options* (append (options*) (list line)))
         (loop (read-line)))))
 
+;; Request a redraw
+(define (request-redraw)
+  (put-message (redraw-channel*) 'redraw)
+  #t)
+
 ;; Our key handler that adapts to the keyboard module interface
 (define (handle-key key)
   (let ((input-handler (make-input-handler
-                        (lambda ()
-                          (put-message (exit-channel*) 'redraw)
-                          (pk 'redraw-put)
-                          #t)
+                        request-redraw
                         input-text*
                         selected-index*
                         filtered-options*
@@ -89,8 +98,10 @@
    (lambda ()
      (exit-channel* (make-channel))
      (filter-channel* (make-channel))
+     (redraw-channel* (make-channel))
      (initialize-keyboard-fibers)
 
+     ;; Filter processing fiber
      (spawn-fiber
       (lambda ()
         (let loop ()
@@ -100,7 +111,7 @@
              (filtered-options* (filter-options (options*) text))
              (selected-index* 0)
              ;; Request a redraw
-             (put-message (exit-channel*) 'redraw))
+             (request-redraw))
             (_ #t))
           (pk 'filter-loop)
           (loop))))
@@ -110,6 +121,15 @@
      ;; Connect to Wayland display with fiber-aware seat listener
      (let ((conn (connect-wayland wl-seat-listener-with-fibers)))
        (wayland-conn conn)
+
+       (spawn-fiber
+        (lambda ()
+          (let loop ()
+            (match (get-message (redraw-channel*))
+              ('redraw (redraw))
+              (_ #t))
+            (pk 'redraw-loop)
+            (loop))))
 
        ;; Create and configure window
        (create-window
@@ -147,23 +167,11 @@
               (loop)))
           #t))
 
+       ;; Main exit handling loop
        (let loop ()
-         (pk 'main-loop)
-         (perform-operation
-          (choice-operation
-           (wrap-operation (get-operation (exit-channel*))
-                           (match-lambda
-                             ('redraw
-                              (pk 'redraw-request-received)
-                              (redraw))
-                             (exit-code
-                              (format (current-error-port) "Exiting with code: ~a~%" exit-code)
-                              (primitive-exit exit-code))))
-           (wrap-operation (sleep-operation 0.1)
-                           (lambda () (loop))))))
-       ;; Main event loop
-       ;; (run-event-loop conn)
-       ))
+         (let ((exit-code (get-message (exit-channel*))))
+           (format (current-error-port) "Exiting with code: ~a~%" exit-code)
+           (primitive-exit exit-code)))))
 
    ;; Ensure all fibers complete before exit
    #:drain? #t))
