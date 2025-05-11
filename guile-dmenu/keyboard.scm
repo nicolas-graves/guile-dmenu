@@ -187,8 +187,7 @@
   (spawn-fiber key-processor-fiber)
   (sleep 0.01))
 
-;; Key decoder function (moved from input.scm)
-(define (make-key-decoder state-channel exit-channel)
+(define (make-key-decoder app-channel exit-channel)
   (lambda (key xkb-state)
     (let* ((xkb-key (+ 8 key))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
@@ -206,26 +205,26 @@
 
        ;; Enter - Select current option
        ((= keysym XKB_KEY_Return)
-        (put-message state-channel 'select))
+        (put-message app-channel 'select))
 
        ;; Down arrow/Ctrl+n - Move selection down
        ((or (= keysym XKB_KEY_Down)
             (and ctrl-pressed (= keysym XKB_KEY_n)))
-        (put-message state-channel 'move-down))
+        (put-message app-channel 'move-down))
 
        ;; Up arrow/Ctrl+p - Move selection up
        ((or (= keysym XKB_KEY_Up)
             (and ctrl-pressed (= keysym XKB_KEY_p)))
-        (put-message state-channel 'move-up))
+        (put-message app-channel 'move-up))
 
        ;; Backspace - Delete last character
        ((= keysym XKB_KEY_BackSpace)
-        (put-message state-channel 'backspace))
+        (put-message app-channel 'backspace))
 
        ;; Character input - Add character
        (else
         (unless ctrl-pressed
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
             (when (and (> utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
-              (put-message state-channel `(input-char ,(integer->char utf32))))))))
+              (put-message app-channel `(input-char ,(integer->char utf32))))))))
       #t)))
