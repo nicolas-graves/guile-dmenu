@@ -30,6 +30,7 @@
 (define input-text* (make-parameter ""))
 (define filtered-options* (make-parameter '()))
 (define exit-channel* (make-parameter #f))
+(define filter-channel* (make-parameter #f))
 
 ;; Draw the menu using the graphics module
 (define (draw-frame)
@@ -49,6 +50,7 @@
     (wl-surface-attach surface buffer 0 0)
     (wl-surface-damage surface 0 0 (width*) 1000)
     (wl-surface-commit surface)
+    (pk 'redraw)
     #t))
 
 ;; Read options from stdin
@@ -61,7 +63,10 @@
 ;; Our key handler that adapts to the keyboard module interface
 (define (handle-key key)
   (let ((input-handler (make-input-handler
-                        redraw
+                        (lambda ()
+                          (put-message (exit-channel*) 'redraw)
+                          (pk 'redraw-put)
+                          #t)
                         input-text*
                         selected-index*
                         filtered-options*
@@ -69,7 +74,8 @@
                         max-options*
                         (lambda (code)
                           (put-message (exit-channel*) code)
-                          #t))))
+                          #t)
+                        filter-channel*)))
     (input-handler key (xkb-state))
     #t))
 
@@ -82,7 +88,23 @@
   (run-fibers
    (lambda ()
      (exit-channel* (make-channel))
+     (filter-channel* (make-channel))
      (initialize-keyboard-fibers)
+
+     (spawn-fiber
+      (lambda ()
+        (let loop ()
+          (match (get-message (filter-channel*))
+            (('filter text)
+             ;; Do the filtering work
+             (filtered-options* (filter-options (options*) text))
+             (selected-index* 0)
+             ;; Request a redraw
+             (put-message (exit-channel*) 'redraw))
+            (_ #t))
+          (pk 'filter-loop)
+          (loop))))
+
      (start-key-processor-fiber)
 
      ;; Connect to Wayland display with fiber-aware seat listener
@@ -119,8 +141,8 @@
               (sleep 0.01)
               ;; Dispatch any pending events
               (wl-display-dispatch display)
-              ;; (wl-display-flush display)
-              (pk 'wayland-dispatch-loop)
+              (wl-display-flush display)
+              (pk 'wayland-loop)
 
               (loop)))
           #t))
@@ -130,9 +152,13 @@
          (perform-operation
           (choice-operation
            (wrap-operation (get-operation (exit-channel*))
-                           (lambda (exit-code)
-                             (format (current-error-port) "Exiting with code: ~a~%" exit-code)
-                             (primitive-exit exit-code)))
+                           (match-lambda
+                             ('redraw
+                              (pk 'redraw-request-received)
+                              (redraw))
+                             (exit-code
+                              (format (current-error-port) "Exiting with code: ~a~%" exit-code)
+                              (primitive-exit exit-code))))
            (wrap-operation (sleep-operation 0.1)
                            (lambda () (loop))))))
        ;; Main event loop

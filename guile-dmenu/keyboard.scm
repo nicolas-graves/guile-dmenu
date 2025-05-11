@@ -176,7 +176,7 @@
 
       (('key key 0 time)  ; Key released
        ;; Later: cancel repeat if it's for this key
-       )
+       #t)
 
       (('modifiers mods-depressed mods-latched mods-locked group)
        ;; Update XKB state if available
@@ -185,7 +185,9 @@
                                 mods-depressed
                                 mods-latched
                                 mods-locked
-                                0 0 group))))
+                                0 0 group)))
+      (args
+       (pk 'unhandled args)))
 
     (pk 'key-processor-loop)
     (loop))

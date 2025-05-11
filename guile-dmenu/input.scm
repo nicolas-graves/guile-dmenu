@@ -3,6 +3,7 @@
   #:use-module (ice-9 format)
   #:use-module (xkbcommon xkbcommon)
   #:use-module (xkbcommon keysyms)
+  #:use-module (fibers channels)
   #:export (make-input-handler
             filter-options))
 
@@ -15,10 +16,9 @@
          (string-contains-ci opt input))
        options)))
 
-;; Create an input handler function
 (define (make-input-handler on-change input-text selected-index
                             filtered-options options max-options
-                            request-exit-with)
+                            request-exit-with filter-channel)
   (lambda (key xkb-state)
     (let* ((xkb-key (+ 8 key))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
@@ -62,15 +62,16 @@
           (selected-index new-idx)
           (on-change)))
 
-       ;; Backspace - Delete last character of input
+       ;; Backspace - Delete last character and request filtering
        ((= keysym XKB_KEY_BackSpace)
         (let ((current-text (input-text)))
           (unless (string-null? current-text)
-            (input-text (pk 'input (string-drop-right current-text 1)))
-            (filtered-options (filter-options (options) (input-text)))
-            (selected-index 0)
-            (on-change))))
+            (let ((new-text (string-drop-right current-text 1)))
+              (input-text (pk 'i new-text))
+              (put-message (filter-channel) `(filter ,new-text)))))
+        #t)
 
+       ;; Character input - Add character and request filtering
        (else
         (unless ctrl-pressed
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
@@ -80,11 +81,9 @@
                   ;; Regular character input
                   ((and (> utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
                    (let* ((char (integer->char utf32))
-                          (current-text (input-text)))
-                     (input-text (pk 'input (string-append current-text (string char))))
-                     (filtered-options (filter-options (options) (input-text)))
-                     (selected-index 0)
-                     (on-change))))))
+                          (current-text (input-text))
+                          (new-text (string-append current-text (string char))))
+                     (input-text (pk 'i new-text))
+                     (put-message (filter-channel) `(filter ,new-text)))))))
         #t)))
-    (pk 'ih)
     #t))
