@@ -210,12 +210,12 @@
        ;; Down arrow/Ctrl+n - Move selection down
        ((or (= keysym XKB_KEY_Down)
             (and ctrl-pressed (= keysym XKB_KEY_n)))
-        (put-message app-channel 'move-down))
+        (put-message app-channel 'next))
 
        ;; Up arrow/Ctrl+p - Move selection up
        ((or (= keysym XKB_KEY_Up)
             (and ctrl-pressed (= keysym XKB_KEY_p)))
-        (put-message app-channel 'move-up))
+        (put-message app-channel 'previous))
 
        ;; Backspace - Delete last character
        ((= keysym XKB_KEY_BackSpace)

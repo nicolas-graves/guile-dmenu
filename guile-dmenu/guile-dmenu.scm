@@ -98,16 +98,16 @@
                                    current-state)
                                   (_ current-state)))
 
-                               ('move-down
-                                (match (handle-move-down current-state)
+                               ('next
+                                (match (handle-next current-state)
                                   (('state-update new-state)
                                    (draw conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
 
-                               ('move-up
-                                (match (handle-move-up current-state)
+                               ('previous
+                                (match (handle-previous current-state)
                                   (('state-update new-state)
                                    (draw conn new-state max-options)
                                    (wl-display-flush display)

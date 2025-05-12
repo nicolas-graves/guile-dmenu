@@ -3,8 +3,8 @@
   #:use-module (srfi srfi-9)
   #:export (filter-options
             handle-select
-            handle-move-down
-            handle-move-up
+            handle-next
+            handle-previous
             handle-backspace
             handle-input-char
             ;; State record exports
@@ -53,7 +53,7 @@
         (list 'no-change state))))
 
 ;; Handle moving selection down
-(define (handle-move-down state)
+(define (handle-next state)
   (let ((selected-index (completing-read-state-selected-index state))
         (filtered-options (completing-read-state-filtered-options state)))
     (let ((new-idx (if (< (+ selected-index 1) (length filtered-options))
@@ -65,7 +65,7 @@
                                         filtered-options)))))
 
 ;; Handle moving selection up
-(define (handle-move-up state)
+(define (handle-previous state)
   (let ((selected-index (completing-read-state-selected-index state)))
     (let ((new-idx (if (> selected-index 0)
                        (- selected-index 1)
