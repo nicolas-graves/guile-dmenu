@@ -22,21 +22,23 @@
 (define padding* (make-parameter 4))
 (define prompt* (make-parameter "dmenu: "))
 
-;; Draw the menu using the graphics module
-(define (draw-frame state shm max-options)
-  (let ((height (* (+ 1 (min (length (completing-read-state-filtered-options state))
-                             max-options))
-                   (+ 14 (* 2 (padding*))))))
-    (draw-menu (width*) height (padding*)
-               shm (prompt*) (completing-read-state-input-text state)
-               (completing-read-state-selected-index state)
-               (completing-read-state-filtered-options state) max-options)))
-
-;; Perform the actual redraw
-(define (do-redraw connection state max-options)
+(define (draw connection state max-options)
   (and-let* ((surface (and=> connection wayland-connection-surface))
+             (input-text (completing-read-state-input-text state))
+             (options (completing-read-state-filtered-options state))
+             (selected-index (completing-read-state-selected-index state))
              (shm (wayland-connection-shm connection))
-             (buffer (draw-frame state shm max-options)))
+             (height (* (+ 1 (min (length options) max-options))
+                        (+ 14 (* 2 (padding*)))))
+             (buffer (draw-menu (width*)
+                                height
+                                (padding*)
+                                shm
+                                (prompt*)
+                                input-text
+                                selected-index
+                                options
+                                max-options)))
     (wl-surface-attach surface buffer 0 0)
     (wl-surface-damage surface 0 0 (width*) 1000)
     (wl-surface-commit surface)
@@ -99,7 +101,7 @@
                                ('move-down
                                 (match (handle-move-down current-state)
                                   (('state-update new-state)
-                                   (do-redraw conn new-state max-options)
+                                   (draw conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
@@ -107,7 +109,7 @@
                                ('move-up
                                 (match (handle-move-up current-state)
                                   (('state-update new-state)
-                                   (do-redraw conn new-state max-options)
+                                   (draw conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
@@ -116,7 +118,7 @@
                                 (match (handle-backspace current-state options)
                                   (('state-update new-state)
                                    (pk 'input (completing-read-state-input-text new-state))
-                                   (do-redraw conn new-state max-options)
+                                   (draw conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (('no-change _)
@@ -127,19 +129,19 @@
                                 (match (handle-input-char char current-state options)
                                   (('state-update new-state)
                                    (pk 'input (completing-read-state-input-text new-state))
-                                   (do-redraw conn new-state max-options)
+                                   (draw conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
 
                                ;; ---- Wayland Operations ----
                                ('redraw
-                                (do-redraw conn current-state max-options)
+                                (draw conn current-state max-options)
                                 (wl-display-flush display)
                                 current-state)
 
                                ('surface-configure
-                                (do-redraw conn current-state max-options)
+                                (draw conn current-state max-options)
                                 (wl-display-flush display)
                                 current-state)
 
