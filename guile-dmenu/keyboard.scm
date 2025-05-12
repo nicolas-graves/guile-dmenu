@@ -11,6 +11,7 @@
   #:use-module (fibers)
   #:use-module (fibers channels)
   #:use-module (fibers operations)
+  #:use-module (srfi srfi-1)
   #:export (handle-key-internal
             initialize-fallback-keymap
             process-keymap
@@ -68,18 +69,8 @@
 ;; Initialize a fallback XKB keymap
 (define (initialize-fallback-keymap)
   (let* ((ctx (xkb-context-new))
-         ;; Create a rule names structure for the current locale
-         (locale (or (getenv "LC_ALL")
-                    (getenv "LC_CTYPE")
-                    (getenv "LANG")
-                    "C"))
-         ;; Parse locale to get language code
-         (locale-parts (string-split locale #\_))
-         (lang (if (>= (length locale-parts) 1)
-                  (car locale-parts)
-                  "us"))
-
-         ;; Names with user's layout
+         (locale (any getenv '("LC_ALL" "LC_TYPE" "LANG")))
+         (lang (car (string-split locale #\_)))
          (names (make <xkb-rule-names>
                   #:rules "evdev"
                   #:model "pc105"
