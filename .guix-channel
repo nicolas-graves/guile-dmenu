@@ -1,4 +1,4 @@
-;; -*- mode: lisp -*-
+;; -*- mode: scheme -*-
 (channel
  (version 0)
  (url "https://git.sr.ht/~ngraves/guile-dmenu")
