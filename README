@@ -1,7 +1,39 @@
+-*- mode: org -*-
+
+* Guile-Dmenu
+
+This repository provides a guile library and client program inspired by dmenu.  It will also provide a guile Emacs-like completing-read procedure in a near future.
+
+** Try it!
 
 guix shell -m .guix/modules/guile-dmenu-package.scm
 echo "1\n2\n3" | guile -L . --no-auto-compile -e main guile-dmenu/guile-dmenu.scm
 
+or
+
+echo "1\n2\n3" | $(guix build -f .guix/modules/guile-dmenu-package.scm)/bin/dmenu
+
 You'll also need
+
 for_window [app_id="wl-dmenu"] floating enable
-in your sway configuration for the expected result.
+
+in your Sway configuration for the expected result (otherwise Sway will take over the window placing and sizing).
+
+* FAQ
+
+** What is not there yet ?
+- [ ] Configuration is almost non-existent
+- [ ] Compatibility with the bemenu API / configuration library
+- [ ] Repeat
+- [ ] Check some corner cases / handle all data sent as configuration by the compositor
+
+** Differences with dmenu-like programs ?
+- Powered by guile
+- Not that minimal (but all Wayland clients are too)
+
+** Difference with completing-read
+- [ ] Not yet there
+
+** Why not use the bemenu library with guile bindings ?
+
+That would've been an easier way to implement it. But at some point, I expected that providing a guile implementation of completing-read, it could be useful in the efforts towards guile-emacs.  For this reason, I expected it would be better to write all in Guile rather than using an FFI with bemenu (which would at some point be blocking in order to reach that result).
