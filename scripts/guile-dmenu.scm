@@ -20,9 +20,8 @@
 ;; Configuration parameters - these don't change during execution
 (define width* (make-parameter 800))
 (define padding* (make-parameter 4))
-(define prompt* (make-parameter "dmenu: "))
 
-(define (draw connection state max-options)
+(define (draw prompt connection state max-options)
   (and-let* ((surface (and=> connection wayland-connection-surface))
              (input-text (completing-read-state-input-text state))
              (options (completing-read-state-filtered-options state))
@@ -34,7 +33,7 @@
                                 height
                                 (padding*)
                                 shm
-                                (prompt*)
+                                prompt
                                 input-text
                                 selected-index
                                 options
@@ -51,10 +50,8 @@
         (reverse options)
         (loop (read-line) (cons line options)))))
 
-(define (main . args)
-  (let* ((options (read-stdin))
-         (max-options (length options)))
-
+(define (completing-read prompt collection)
+  (let ((max-options (length collection)))
     (initialize-fallback-keymap)
 
     (run-fibers
@@ -66,7 +63,7 @@
          (initialize-keyboard-fibers)
 
          ;; Create initial state
-         (let ((initial-program-state (initial-state options)))
+         (let ((initial-program-state (initial-state collection)))
 
            ;; Set up key decoder with the app channel and exit channel
            (set-key-handler! (make-key-decoder app-channel exit-channel))
@@ -101,7 +98,7 @@
                                ('next
                                 (match (handle-next current-state)
                                   (('state-update new-state)
-                                   (draw conn new-state max-options)
+                                   (draw prompt conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
@@ -109,16 +106,16 @@
                                ('previous
                                 (match (handle-previous current-state)
                                   (('state-update new-state)
-                                   (draw conn new-state max-options)
+                                   (draw prompt conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
 
                                ('backspace
-                                (match (handle-backspace current-state options)
+                                (match (handle-backspace current-state collection)
                                   (('state-update new-state)
                                    (pk 'input (completing-read-state-input-text new-state))
-                                   (draw conn new-state max-options)
+                                   (draw prompt conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (('no-change _)
@@ -126,22 +123,22 @@
                                   (_ current-state)))
 
                                (('input-char char)
-                                (match (handle-input-char char current-state options)
+                                (match (handle-input-char char current-state collection)
                                   (('state-update new-state)
                                    (pk 'input (completing-read-state-input-text new-state))
-                                   (draw conn new-state max-options)
+                                   (draw prompt conn new-state max-options)
                                    (wl-display-flush display)
                                    new-state)
                                   (_ current-state)))
 
                                ;; ---- Wayland Operations ----
                                ('redraw
-                                (draw conn current-state max-options)
+                                (draw prompt conn current-state max-options)
                                 (wl-display-flush display)
                                 current-state)
 
                                ('surface-configure
-                                (draw conn current-state max-options)
+                                (draw prompt conn current-state max-options)
                                 (wl-display-flush display)
                                 current-state)
 
@@ -190,3 +187,8 @@
                  (primitive-exit exit-code)))))))
 
      #:drain? #t)))
+
+(define (main . args)
+  (let ((prompt "dmenu: ")
+        (options (read-stdin)))
+    (completing-read prompt options)))
