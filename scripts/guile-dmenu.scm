@@ -56,135 +56,127 @@
 
     (run-fibers
      (lambda ()
-       ;; Create a unified channel for all application events
        (let ((app-channel (make-channel))
              (exit-channel (make-channel)))
-
          (initialize-keyboard-fibers)
+         (set-key-handler! (make-key-decoder app-channel exit-channel))
+         (start-key-processor-fiber)
 
-         ;; Create initial state
-         (let ((initial-program-state (initial-state collection)))
+         (let ((initial-program-state (initial-state collection))
+               (conn (connect-wayland wl-seat-listener-with-fibers)))
 
-           ;; Set up key decoder with the app channel and exit channel
-           (set-key-handler! (make-key-decoder app-channel exit-channel))
-           (start-key-processor-fiber)
+           ;; Main application loop - processes all events and maintains state
+           (spawn-fiber
+            (lambda ()
+              (let ((display (wayland-connection-display conn)))
+                (let loop ((current-state initial-program-state))
+                  ;; Poll for events with timeout
+                  (let* ((op (choice-operation
+                              (get-operation app-channel)
+                              (wrap-operation (sleep-operation 0.001)
+                                              (lambda () 'timeout))))
+                         (next-state
+                          (match (perform-operation op)
+                            ;; ---- State Operations ----
+                            ('select
+                             (match (handle-select current-state)
+                               (('exit code)
+                                (put-message exit-channel code)
+                                current-state)
+                               (('no-change _)
+                                current-state)
+                               (_ current-state)))
 
-           ;; Connect to Wayland display
-           (let ((conn (connect-wayland wl-seat-listener-with-fibers)))
-
-             ;; Main application loop - processes all events and maintains state
-             (spawn-fiber
-              (lambda ()
-                (let ((display (wayland-connection-display conn)))
-                  (let loop ((current-state initial-program-state))
-                    ;; Poll for events with timeout
-                    (let ((op (choice-operation
-                               (get-operation app-channel)
-                               (wrap-operation (sleep-operation 0.001)
-                                               (lambda () 'timeout)))))
-
-                      (let ((next-state
-                             (match (perform-operation op)
-                               ;; ---- State Operations ----
-                               ('select
-                                (match (handle-select current-state)
-                                  (('exit code)
-                                   (put-message exit-channel code)
-                                   current-state)
-                                  (('no-change _)
-                                   current-state)
-                                  (_ current-state)))
-
-                               ('next
-                                (match (handle-next current-state)
-                                  (('state-update new-state)
-                                   (draw prompt conn new-state max-options)
-                                   (wl-display-flush display)
-                                   new-state)
-                                  (_ current-state)))
-
-                               ('previous
-                                (match (handle-previous current-state)
-                                  (('state-update new-state)
-                                   (draw prompt conn new-state max-options)
-                                   (wl-display-flush display)
-                                   new-state)
-                                  (_ current-state)))
-
-                               ('backspace
-                                (match (handle-backspace current-state collection)
-                                  (('state-update new-state)
-                                   (pk 'input (completing-read-state-input-text new-state))
-                                   (draw prompt conn new-state max-options)
-                                   (wl-display-flush display)
-                                   new-state)
-                                  (('no-change _)
-                                   current-state)
-                                  (_ current-state)))
-
-                               (('input-char char)
-                                (match (handle-input-char char current-state collection)
-                                  (('state-update new-state)
-                                   (pk 'input (completing-read-state-input-text new-state))
-                                   (draw prompt conn new-state max-options)
-                                   (wl-display-flush display)
-                                   new-state)
-                                  (_ current-state)))
-
-                               ;; ---- Wayland Operations ----
-                               ('redraw
-                                (draw prompt conn current-state max-options)
+                            ('next
+                             (match (handle-next current-state)
+                               (('state-update new-state)
+                                (draw prompt conn new-state max-options)
                                 (wl-display-flush display)
-                                current-state)
+                                new-state)
+                               (_ current-state)))
 
-                               ('surface-configure
-                                (draw prompt conn current-state max-options)
+                            ('previous
+                             (match (handle-previous current-state)
+                               (('state-update new-state)
+                                (draw prompt conn new-state max-options)
                                 (wl-display-flush display)
+                                new-state)
+                               (_ current-state)))
+
+                            ('backspace
+                             (match (handle-backspace current-state collection)
+                               (('state-update new-state)
+                                (pk 'input (completing-read-state-input-text new-state))
+                                (draw prompt conn new-state max-options)
+                                (wl-display-flush display)
+                                new-state)
+                               (('no-change _)
                                 current-state)
+                               (_ current-state)))
 
-                               ('timeout
-                                (wl-display-dispatch display)
-                                current-state)
+                            (('input-char char)
+                             (match (handle-input-char char current-state collection)
+                               (('state-update new-state)
+                                (pk 'input (completing-read-state-input-text new-state))
+                                (draw prompt conn new-state max-options)
+                                (wl-display-flush display)
+                                new-state)
+                               (_ current-state)))
 
-                               (_ current-state))))
+                            ;; ---- Wayland Operations ----
+                            ('redraw
+                             (draw prompt conn current-state max-options)
+                             (wl-display-flush display)
+                             current-state)
 
-                        (loop next-state))))
-                  #t)))
+                            ('surface-configure
+                             (draw prompt conn current-state max-options)
+                             (wl-display-flush display)
+                             current-state)
 
-             ;; Initial draw request
-             (put-message app-channel 'redraw)
+                            ('timeout
+                             (wl-display-dispatch display)
+                             current-state)
 
-             ;; Create and configure window
-             (create-window
-              conn
-              "dmenu"
-              "wl-dmenu"
-              (width*)
+                            (_ current-state))))
 
-              ;; XDG surface configure callback
-              (lambda (data xdg-surface serial)
-                (xdg-surface-ack-configure xdg-surface serial)
-                ;; Request a redraw after surface configuration
-                (spawn-fiber
-                 (lambda ()
-                   (put-message app-channel 'surface-configure)))
-                #t)
+                    (loop next-state)))
+                #t)))
 
-              ;; XDG toplevel configure callback
-              (lambda (data xdg width height states)
-                (unless (zero? width)
-                  (width* width))
-                #t)
+           ;; Initial draw request
+           (put-message app-channel 'redraw)
 
-              ;; XDG toplevel close callback
-              (lambda (data xdg-toplevel)
-                (exit 0)))
+           ;; Create and configure window
+           (create-window
+            conn
+            "dmenu"
+            "wl-dmenu"
+            (width*)
 
-             ;; Exit handling loop
-             (let loop ()
-               (let ((exit-code (get-message exit-channel)))
-                 (format (current-error-port) "Exiting with code: ~a~%" exit-code)
-                 (primitive-exit exit-code)))))))
+            ;; XDG surface configure callback
+            (lambda (data xdg-surface serial)
+              (xdg-surface-ack-configure xdg-surface serial)
+              ;; Request a redraw after surface configuration
+              (spawn-fiber
+               (lambda ()
+                 (put-message app-channel 'surface-configure)))
+              #t)
+
+            ;; XDG toplevel configure callback
+            (lambda (data xdg width height states)
+              (unless (zero? width)
+                (width* width))
+              #t)
+
+            ;; XDG toplevel close callback
+            (lambda (data xdg-toplevel)
+              (exit 0)))
+
+           ;; Exit handling loop
+           (let loop ()
+             (let ((exit-code (get-message exit-channel)))
+               (format (current-error-port) "Exiting with code: ~a~%" exit-code)
+               (primitive-exit exit-code))))))
 
      #:drain? #t)))
 
