@@ -1,4 +1,4 @@
-#!/bin/guile --no-auto-compile -e main
+#!/bin/env -S /bin/guile --no-auto-compile -e main
 !#
 (use-modules (guile-dmenu wayland)
              (guile-dmenu memory-utils)
