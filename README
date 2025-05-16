@@ -6,11 +6,6 @@ This repository provides a guile library and client program inspired by dmenu.  
 
 ** Try it!
 
-guix shell -m .guix/modules/guile-dmenu-package.scm
-echo "1\n2\n3" | guile -L . --no-auto-compile -e main guile-dmenu/guile-dmenu.scm
-
-or
-
 echo "1\n2\n3" | $(guix build -f .guix/modules/guile-dmenu-package.scm)/bin/dmenu
 
 You'll also need
@@ -23,6 +18,7 @@ in your Sway configuration for the expected result (otherwise Sway will take ove
 
 ** What is not there yet ?
 - [ ] Configuration is almost non-existent
+- [ ] I haven't checked Unicode support (maybe a need for guile-pango).
 - [ ] Compatibility with the bemenu API / configuration library
 - [ ] Repeat
 - [ ] Check some corner cases / handle all data sent as configuration by the compositor

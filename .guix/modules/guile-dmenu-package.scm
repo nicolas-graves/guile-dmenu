@@ -50,25 +50,17 @@
         #:phases
         #~(modify-phases %standard-phases
             (add-after 'build 'install-script
-              (lambda _
+              (lambda* (#:key inputs #:allow-other-keys)
                 (let* ((bin (string-append #$output "/bin/"))
-                       (guile-dmenu (string-append bin ".guile-dmenu.scm"))
                        (dmenu (string-append bin "dmenu")))
                   (mkdir-p bin)
-                  (copy-file "scripts/guile-dmenu.scm" guile-dmenu)
-                  (call-with-output-file dmenu
-                    (lambda (out)
-                      (format out "#!~a/bin/bash
-export GUILE_LOAD_PATH=\"~a${GUILE_LOAD_PATH:+:}$GUILE_LOAD_PATH\"
-export GUILE_LOAD_COMPILED_PATH=\"~a${GUILE_LOAD_COMPILED_PATH:+:}~a\"
-exec -a \"$0\" ~a --no-auto-compile -e main ~a \"$@\""
-                              (which "bash")
-                              (getenv "GUILE_LOAD_PATH")
-                              (getenv "GUILE_LOAD_COMPILED_PATH")
-                              "$GUILE_LOAD_COMPILED_PATH"
-                              (which "guile")
-                              guile-dmenu)))
-                  (chmod dmenu #o755)))))))
+                  (copy-file "scripts/guile-dmenu.scm" dmenu)
+                  (wrap-program dmenu
+                    #:sh (search-input-file inputs "bin/bash")
+                    `("GUILE_LOAD_PATH" ":" prefix
+                      ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
+                    `("GUILE_LOAD_COMPILED_PATH" ":" prefix
+                      ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:)))))))))
       (inputs (list bash-minimal guile-3.0))
       (propagated-inputs (list guile-cairo
                                guile-fibers

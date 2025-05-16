@@ -1,3 +1,5 @@
+#!/bin/guile --no-auto-compile -e main
+!#
 (use-modules (guile-dmenu wayland)
              (guile-dmenu memory-utils)
              (guile-dmenu graphics)
