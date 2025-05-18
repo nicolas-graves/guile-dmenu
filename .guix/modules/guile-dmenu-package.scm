@@ -9,7 +9,6 @@
   #:use-module (guix git-download)
   #:use-module (guix gexp)
   #:use-module (gnu packages)
-  #:use-module (gnu packages base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages guile-xyz)
@@ -55,11 +54,6 @@
                 (let* ((bin (string-append #$output "/bin/"))
                        (dmenu (string-append bin "dmenu")))
                   (install-file "scripts/dmenu" bin)
-                  (substitute* dmenu
-                    (("/bin/env")
-                     (search-input-file inputs "bin/env"))
-                    (("/bin/guile")
-                     (search-input-file inputs "bin/guile")))
                   (wrap-program dmenu
                     #:sh (search-input-file inputs "bin/bash")
                     `("GUILE_AUTO_COMPILE" ":" = ("0"))
@@ -69,7 +63,7 @@
                       ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH")
                                      #\:)))))))))
       (native-inputs (list guile-3.0))
-      (inputs (list bash-minimal coreutils-minimal guile-3.0))
+      (inputs (list bash-minimal guile-3.0))
       (propagated-inputs (list guile-cairo
                                guile-fibers
                                guile-wayland

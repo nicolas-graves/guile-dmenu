@@ -1,4 +1,4 @@
-#!/bin/env -S /bin/guile --no-auto-compile -e main
+#!/bin/guile
 !#
 (use-modules (guile-dmenu wayland)
              (guile-dmenu memory-utils)
@@ -182,7 +182,5 @@
 
      #:drain? #t)))
 
-(define (main . args)
-  (let ((prompt "dmenu: ")
-        (options (read-stdin)))
-    (completing-read prompt options)))
+(let ((prompt "dmenu: "))
+  (completing-read prompt (read-stdin)))
