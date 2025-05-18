@@ -14,7 +14,8 @@
   #:use-module (gnu packages guile-xyz)
   #:use-module (gnu packages gtk)
   #:use-module (guile-wayland packages guile-wayland)
-  #:use-module (guile-wayland packages guile-xyz))
+  #:use-module (guile-wayland packages guile-xyz)
+  #:use-module (git))
 
 (define-public guile-bytestructure-class-next
   ((package-input-rewriting/spec
@@ -33,15 +34,19 @@
      ("swig" . ,(const (@ (gnu packages swig) swig)))
      ("graphviz" . ,(const (@ (gnu packages graphviz) graphviz))))))
 
-(define-public guile-dmenu
-  (let ((commit "58b61fd923af9d4299150de3e70fa4f5943ed341")
-        (revision "8"))
+(define-public guile-dmenu-devel
+  (let* ((dir (dirname (repository-discover (dirname (current-filename)))))
+         (repo (repository-open dir))
+         (head (repository-head repo))
+         (oid (reference-target head))
+         (commit (oid->string (commit-id (commit-lookup repo oid))))
+         (revision "19"))
     (package
       (name "guile-dmenu")
       (version (git-version "0.0.0" revision commit))
       (source
        (git-checkout
-        (url "https://git.sr.ht/~ngraves/guile-dmenu")
+        (url dir)
         (commit commit)))
       (build-system guile-build-system)
       (arguments
@@ -67,7 +72,7 @@
       (propagated-inputs (list guile-cairo
                                guile-fibers
                                guile-wayland
-                               guile-xkbcommon))
+                               guile-xkbcommon-next))
       (home-page "https://git.sr.ht/~ngraves/guile-dmenu")
       (synopsis "Guile completing-read library and dynamic menu")
       (description "This package provides a guile wayland implementation
@@ -76,7 +81,7 @@ completing-read procedure.")
       (license license:gpl3+))))
 
 (match (cadr (command-line))
-  ("build" guile-dmenu)
+  ("build" guile-dmenu-devel)
   ("shell" (concatenate-manifests
             (list (package->development-manifest (next guile-dmenu))
                   (packages->manifest
