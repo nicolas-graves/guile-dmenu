@@ -47,12 +47,13 @@
 
 (define (process-keymap format fd size)
   "Process a keymap received from the compositor."
-  (let* ((ctx (xkb-context-new))
-         (data (mmap #f size PROT_READ MAP_SHARED fd 0))
-         (keymap-string (utf8->string data))
-         (km (xkb-keymap-new ctx keymap-string)))
-    (munmap data)
-    (keymap-state (make-keymap-state ctx km (xkb-state-new km)))))
+  (and (> size 0)
+       (let* ((ctx (xkb-context-new))
+              (data (mmap #f size PROT_READ MAP_SHARED fd 0))
+              (keymap-string (utf8->string data))
+              (km (xkb-keymap-new ctx keymap-string)))
+         (munmap data)
+         (keymap-state (make-keymap-state ctx km (xkb-state-new km))))))
 
 (define (initialize-fallback-keymap)
   (let* ((ctx (xkb-context-new))
