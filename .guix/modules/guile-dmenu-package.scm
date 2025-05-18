@@ -55,7 +55,7 @@
                 (let* ((bin (string-append #$output "/bin/"))
                        (dmenu (string-append bin "dmenu")))
                   (mkdir-p bin)
-                  (copy-file "scripts/guile-dmenu.scm" dmenu)
+                  (copy-file "scripts/guile-dmenu" dmenu)
                   (substitute* dmenu
                     (("/bin/env")
                      (search-input-file inputs "bin/env"))
@@ -66,7 +66,8 @@
                     `("GUILE_LOAD_PATH" ":" prefix
                       ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
                     `("GUILE_LOAD_COMPILED_PATH" ":" prefix
-                      ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:)))))))))
+                      ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH")
+                                     #\:)))))))))
       (native-inputs (list guile-3.0))
       (inputs (list bash-minimal coreutils-minimal guile-3.0))
       (propagated-inputs (list guile-cairo
