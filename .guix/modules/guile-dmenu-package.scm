@@ -35,8 +35,8 @@
      ("graphviz" . ,(const (@ (gnu packages graphviz) graphviz))))))
 
 (define-public guile-dmenu
-  (let ((commit "dc41e12")
-        (revision "0"))
+  (let ((commit "58b61fd923af9d4299150de3e70fa4f5943ed341")
+        (revision "8"))
     (package
       (name "guile-dmenu")
       (version (git-version "0.0.0" revision commit))
