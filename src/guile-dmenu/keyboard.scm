@@ -75,7 +75,8 @@
     #:keymap
     (lambda (data keyboard format fd size)
       (process-keymap format fd size)
-      (close-fdes fd))
+      (when (> fd 0)
+        (close-fdes fd)))
 
     #:enter
     (lambda (data keyboard serial surface keys)
