@@ -22,8 +22,10 @@
             wl-seat-listener
             wl-keyboard-listener-with-fibers
             wl-seat-listener-with-fibers
-            start-key-processor-fiber
             make-key-decoder))
+
+(define %key-pressed  1)
+(define %key-released 0)
 
 (define-record-type <keymap-state>
   (make-keymap-state context keymap xkb-state) keymap-state?
@@ -45,11 +47,33 @@
        (let* ((ctx (xkb-context-new))
               (data (mmap #f size PROT_READ MAP_SHARED fd 0))
               (keymap-string (utf8->string data))
-              (km (xkb-keymap-new ctx keymap-string)))
+              (km (xkb-keymap-new ctx keymap-string))
+              (key-processor-fiber
+               (lambda ()
+                 (let loop ()
+                   (match (get-message (key-event-channel))
+                     (('key key %key-pressed time)
+                      (handle-key-internal key))
+                     (('key key %key-released time)
+                      ;; Later: cancel repeat if it's for this key
+                      #t)
+                     ;; Update XKB state if available
+                     (('modifiers depressed latched locked group)
+                      (and=> (keymap-state-xkb-state (keymap-state))
+                             (cut xkb-state-update-mask
+                                  <> depressed latched locked 0 0 group)))
+                     (args
+                      (pk 'unhandled args)))
+                   (pk 'key-processor-loop)
+                   (loop))
+                 #t)))
          (munmap data)
          (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
          (unless (key-event-channel)
-           (key-event-channel (make-channel))))))
+           (key-event-channel (make-channel))
+           (sleep 0.001)
+           (spawn-fiber key-processor-fiber)
+           (sleep 0.001)))))
 
 (define (initialize-fallback-keymap)
   (let* ((ctx (xkb-context-new))
@@ -127,37 +151,6 @@
 ;; Function to set the key handler
 (define (set-key-handler! handler)
   (key-handler handler))
-
-(define (key-processor-fiber)
-  (let loop ()
-    (match (get-message (key-event-channel))
-      (('key key 1 time)  ; Key pressed
-       (handle-key-internal key))
-
-      (('key key 0 time)  ; Key released
-       ;; Later: cancel repeat if it's for this key
-       #t)
-
-      (('modifiers mods-depressed mods-latched mods-locked group)
-       ;; Update XKB state if available
-       (and=> (keymap-state-xkb-state (keymap-state))
-              (cut xkb-state-update-mask
-                   <>
-                   mods-depressed
-                   mods-latched
-                   mods-locked
-                   0 0 group)))
-      (args
-       (pk 'unhandled args)))
-
-    (pk 'key-processor-loop)
-    (loop))
-  #t)
-
-(define (start-key-processor-fiber)
-  (format #t "Started the key processor fiber~%")
-  (spawn-fiber key-processor-fiber)
-  (sleep 0.01))
 
 (define (make-key-decoder app-channel exit-channel)
   (lambda (key xkb-state)

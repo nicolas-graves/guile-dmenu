@@ -61,7 +61,6 @@
        (let ((app-channel (make-channel))
              (exit-channel (make-channel)))
          (set-key-handler! (make-key-decoder app-channel exit-channel))
-         (start-key-processor-fiber)
 
          (let ((initial-program-state (initial-state collection))
                (conn (connect-wayland wl-seat-listener-with-fibers)))
