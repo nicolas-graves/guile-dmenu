@@ -41,10 +41,6 @@
 ;; Fiber-related state
 (define key-event-channel (make-parameter #f))
 
-;; Key repeat configuration
-(define initial-delay 0.5)
-(define repeat-delay 0.05)
-
 ;; Initialize fiber support for keyboard
 (define (initialize-keyboard-fibers)
   (key-event-channel (make-channel)))
