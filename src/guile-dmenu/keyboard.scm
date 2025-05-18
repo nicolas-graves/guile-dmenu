@@ -61,7 +61,9 @@
          (names (make-xkb-rule-names
                  #:rules "evdev"
                  #:model "pc105"
-                 #:layout lang))
+                 #:layout lang
+                 #:variant ""
+                 #:options ""))
          (km (xkb-keymap-new ctx names)))
     (keymap-state (make-keymap-state ctx km (xkb-state-new km)))))
 
