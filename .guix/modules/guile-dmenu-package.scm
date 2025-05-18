@@ -62,6 +62,7 @@
                      (search-input-file inputs "bin/guile")))
                   (wrap-program dmenu
                     #:sh (search-input-file inputs "bin/bash")
+                    `("GUILE_AUTO_COMPILE" ":" = ("0"))
                     `("GUILE_LOAD_PATH" ":" prefix
                       ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
                     `("GUILE_LOAD_COMPILED_PATH" ":" prefix
