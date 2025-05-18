@@ -54,8 +54,7 @@
               (lambda* (#:key inputs #:allow-other-keys)
                 (let* ((bin (string-append #$output "/bin/"))
                        (dmenu (string-append bin "dmenu")))
-                  (mkdir-p bin)
-                  (copy-file "scripts/guile-dmenu" dmenu)
+                  (install-file "scripts/dmenu" bin)
                   (substitute* dmenu
                     (("/bin/env")
                      (search-input-file inputs "bin/env"))
