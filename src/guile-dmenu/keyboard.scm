@@ -76,8 +76,7 @@
                  #t)))
          (munmap data)
          (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
-         (spawn-fiber key-processor-fiber)
-         (sleep 0.001))))
+         (spawn-fiber key-processor-fiber))))
 
 (define (initialize-fallback-keymap)
   (let* ((ctx (xkb-context-new))
