@@ -12,31 +12,30 @@
   #:use-module (fibers channels)
   #:use-module (fibers operations)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
   #:export (handle-key-internal
             initialize-fallback-keymap
             process-keymap
             set-key-handler!
             wl-keyboard-listener
             wl-seat-listener
-            xkb-context
-            xkb-keymap
-            xkb-state
-            ;; Fiber-related exports
             wl-keyboard-listener-with-fibers
             wl-seat-listener-with-fibers
             initialize-keyboard-fibers
             start-key-processor-fiber
-            ;; New exports for key decoding
             make-key-decoder))
+
+(define-record-type <keymap-state>
+  (make-keymap-state context keymap xkb-state) keymap-state?
+  (context keymap-state-context)
+  (keymap keymap-state-keymap)
+  (xkb-state keymap-state-xkb-state))
+
+(define keymap-state (make-parameter #f))
 
 (define (log . args)
   (apply format (current-error-port) args)
   (force-output (current-error-port)))
-
-;; XKB state for handling key translation
-(define xkb-context (make-parameter #f))
-(define xkb-keymap (make-parameter #f))
-(define xkb-state (make-parameter #f))
 
 ;; Fiber-related state
 (define key-event-channel (make-parameter #f))
@@ -45,24 +44,15 @@
 (define (initialize-keyboard-fibers)
   (key-event-channel (make-channel)))
 
-;; Process a keymap received from the compositor
 (define (process-keymap format fd size)
-  ;; Initialize the XKB context if not already done
-  (unless (xkb-context)
-    (xkb-context (xkb-context-new)))
-
-  (let* ((ctx (xkb-context))
+  "Process a keymap received from the compositor."
+  (let* ((ctx (xkb-context-new))
          (data (mmap #f size PROT_READ MAP_SHARED fd 0))
-         (keymap-string (utf8->string data)))
+         (keymap-string (utf8->string data))
+         (km (xkb-keymap-new ctx keymap-string)))
+    (munmap data)
+    (keymap-state (make-keymap-state ctx km (xkb-state-new km)))))
 
-    ;; Create a new keymap from the provided data
-    (let ((km (xkb-keymap-new ctx keymap-string)))
-      (xkb-keymap km)
-      ;; Create a new state object from the keymap
-      (xkb-state (xkb-state-new km))
-      (munmap data))))
-
-;; Initialize a fallback XKB keymap
 (define (initialize-fallback-keymap)
   (let* ((ctx (xkb-context-new))
          (locale (any getenv '("LC_ALL" "LC_TYPE" "LANG")))
@@ -70,12 +60,9 @@
          (names (make-xkb-rule-names
                  #:rules "evdev"
                  #:model "pc105"
-                 #:layout lang)))
-
-    (xkb-context ctx)
-    (let ((km (xkb-keymap-new ctx names)))
-      (xkb-keymap km)
-      (xkb-state (xkb-state-new km)))))
+                 #:layout lang))
+         (km (xkb-keymap-new ctx names)))
+    (keymap-state (make-keymap-state ctx km (xkb-state-new km)))))
 
 ;; Define a dynamic variable to store key handler
 (define key-handler (make-parameter #f))
