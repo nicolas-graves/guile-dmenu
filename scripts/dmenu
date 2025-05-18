@@ -54,7 +54,6 @@
 
 (define (completing-read prompt collection)
   (let ((max-options (length collection)))
-    (initialize-fallback-keymap)
 
     (run-fibers
      (lambda ()

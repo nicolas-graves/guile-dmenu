@@ -17,7 +17,6 @@
   #:export (set-key-handler!
             set-key-event-channel!
             handle-key-internal
-            initialize-fallback-keymap
             process-keymap
             wl-keyboard-listener
             wl-seat-listener
@@ -77,19 +76,6 @@
          (munmap data)
          (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
          (spawn-fiber key-processor-fiber))))
-
-(define (initialize-fallback-keymap)
-  (let* ((ctx (xkb-context-new))
-         (locale (any getenv '("LC_ALL" "LC_TYPE" "LANG")))
-         (lang (car (string-split locale #\_)))
-         (names (make-xkb-rule-names
-                 #:rules "evdev"
-                 #:model "pc105"
-                 #:layout lang
-                 #:variant ""
-                 #:options ""))
-         (km (xkb-keymap-new ctx names)))
-    (keymap-state (make-keymap-state ctx km (xkb-state-new km)))))
 
 ;; Handle keyboard key events - keep the original signature
 (define (handle-key-internal key)
