@@ -60,7 +60,6 @@
      (lambda ()
        (let ((app-channel (make-channel))
              (exit-channel (make-channel)))
-         (initialize-keyboard-fibers)
          (set-key-handler! (make-key-decoder app-channel exit-channel))
          (start-key-processor-fiber)
 

@@ -22,7 +22,6 @@
             wl-seat-listener
             wl-keyboard-listener-with-fibers
             wl-seat-listener-with-fibers
-            initialize-keyboard-fibers
             start-key-processor-fiber
             make-key-decoder))
 
@@ -33,17 +32,12 @@
   (xkb-state keymap-state-xkb-state))
 
 (define keymap-state (make-parameter #f))
+(define key-event-channel (make-parameter #f))
+(define key-handler (make-parameter #f))
 
 (define (log . args)
   (apply format (current-error-port) args)
   (force-output (current-error-port)))
-
-;; Fiber-related state
-(define key-event-channel (make-parameter #f))
-
-;; Initialize fiber support for keyboard
-(define (initialize-keyboard-fibers)
-  (key-event-channel (make-channel)))
 
 (define (process-keymap format fd size)
   "Process a keymap received from the compositor."
@@ -53,7 +47,9 @@
               (keymap-string (utf8->string data))
               (km (xkb-keymap-new ctx keymap-string)))
          (munmap data)
-         (keymap-state (make-keymap-state ctx km (xkb-state-new km))))))
+         (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
+         (unless (key-event-channel)
+           (key-event-channel (make-channel))))))
 
 (define (initialize-fallback-keymap)
   (let* ((ctx (xkb-context-new))
@@ -67,9 +63,6 @@
                  #:options ""))
          (km (xkb-keymap-new ctx names)))
     (keymap-state (make-keymap-state ctx km (xkb-state-new km)))))
-
-;; Define a dynamic variable to store key handler
-(define key-handler (make-parameter #f))
 
 ;; Handle keyboard key events - keep the original signature
 (define (handle-key-internal key)
@@ -160,7 +153,6 @@
     (loop))
   #t)
 
-;; Start the key processor fiber
 (define (start-key-processor-fiber)
   (format #t "Started the key processor fiber~%")
   (spawn-fiber key-processor-fiber)
