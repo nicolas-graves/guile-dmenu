@@ -14,10 +14,11 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
-  #:export (handle-key-internal
+  #:export (set-key-handler!
+            set-key-event-channel!
+            handle-key-internal
             initialize-fallback-keymap
             process-keymap
-            set-key-handler!
             wl-keyboard-listener
             wl-seat-listener
             wl-keyboard-listener-with-fibers
@@ -37,16 +38,18 @@
 (define key-event-channel (make-parameter #f))
 (define key-handler (make-parameter #f))
 
+(define (set-key-handler! handler)
+  (key-handler handler))
+
+(define (set-key-event-channel! channel)
+  (key-event-channel channel))
+
 (define (log . args)
   (apply format (current-error-port) args)
   (force-output (current-error-port)))
 
 (define (process-keymap format fd size)
   "Process a keymap received from the compositor."
-  (unless (key-event-channel)
-    (spawn-fiber
-     (lambda ()
-       (key-event-channel (make-channel)))))
   (and (> size 0)
        (let* ((ctx (xkb-context-new))
               (data (mmap #f size PROT_READ MAP_SHARED fd 0))
@@ -92,7 +95,9 @@
 ;; Handle keyboard key events - keep the original signature
 (define (handle-key-internal key)
   ;; Call the handler with both key and xkb-state
-  (pk 'handled key (and (key-handler) ((key-handler) key (xkb-state)))))
+  (pk 'handled key
+       (and (key-handler) ((key-handler) key
+                           (keymap-state-xkb-state (keymap-state))))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
@@ -150,9 +155,6 @@
       #t)))
 
 ;; Function to set the key handler
-(define (set-key-handler! handler)
-  (key-handler handler))
-
 (define (make-key-decoder app-channel exit-channel)
   (lambda (key xkb-state)
     (let* ((xkb-key (+ 8 key))

@@ -59,8 +59,10 @@
     (run-fibers
      (lambda ()
        (let ((app-channel (make-channel))
-             (exit-channel (make-channel)))
+             (exit-channel (make-channel))
+             (key-event-channel (make-channel)))
          (set-key-handler! (make-key-decoder app-channel exit-channel))
+         (set-key-event-channel! key-event-channel)
 
          (let ((initial-program-state (initial-state collection))
                (conn (connect-wayland wl-seat-listener-with-fibers)))
