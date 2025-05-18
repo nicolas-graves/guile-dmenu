@@ -67,10 +67,10 @@
   (let* ((ctx (xkb-context-new))
          (locale (any getenv '("LC_ALL" "LC_TYPE" "LANG")))
          (lang (car (string-split locale #\_)))
-         (names (make <xkb-rule-names>
-                  #:rules "evdev"
-                  #:model "pc105"
-                  #:layout lang)))
+         (names (make-xkb-rule-names
+                 #:rules "evdev"
+                 #:model "pc105"
+                 #:layout lang)))
 
     (xkb-context ctx)
     (let ((km (xkb-keymap-new ctx names)))
