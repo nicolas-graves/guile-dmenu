@@ -13,6 +13,7 @@
   #:use-module (fibers operations)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-26)
   #:export (handle-key-internal
             initialize-fallback-keymap
             process-keymap
@@ -142,12 +143,13 @@
 
       (('modifiers mods-depressed mods-latched mods-locked group)
        ;; Update XKB state if available
-       (when (xkb-state)
-         (xkb-state-update-mask (xkb-state)
-                                mods-depressed
-                                mods-latched
-                                mods-locked
-                                0 0 group)))
+       (and=> (keymap-state-xkb-state (keymap-state))
+              (cut xkb-state-update-mask
+                   <>
+                   mods-depressed
+                   mods-latched
+                   mods-locked
+                   0 0 group)))
       (args
        (pk 'unhandled args)))
 
