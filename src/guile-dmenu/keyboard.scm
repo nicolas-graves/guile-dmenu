@@ -43,6 +43,10 @@
 
 (define (process-keymap format fd size)
   "Process a keymap received from the compositor."
+  (unless (key-event-channel)
+    (spawn-fiber
+     (lambda ()
+       (key-event-channel (make-channel)))))
   (and (> size 0)
        (let* ((ctx (xkb-context-new))
               (data (mmap #f size PROT_READ MAP_SHARED fd 0))
@@ -50,9 +54,6 @@
               (km (xkb-keymap-new ctx keymap-string))
               (key-processor-fiber
                (lambda ()
-                 (unless (key-event-channel)
-                   (key-event-channel (make-channel))
-                   (sleep 0.001))
                  (let loop ()
                    (match (get-message (key-event-channel))
                      (('key key %key-pressed time)
