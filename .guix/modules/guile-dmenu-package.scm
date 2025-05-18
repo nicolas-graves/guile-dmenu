@@ -72,7 +72,7 @@
       (propagated-inputs (list guile-cairo
                                guile-fibers
                                guile-wayland
-                               guile-xkbcommon-next))
+                               guile-xkbcommon))
       (home-page "https://git.sr.ht/~ngraves/guile-dmenu")
       (synopsis "Guile completing-read library and dynamic menu")
       (description "This package provides a guile wayland implementation
