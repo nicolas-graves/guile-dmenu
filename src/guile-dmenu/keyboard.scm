@@ -81,8 +81,7 @@
 (define (handle-key-internal key)
   ;; Call the handler with both key and xkb-state
   (pk 'handled key
-       (and (key-handler) ((key-handler) key
-                           (keymap-state-xkb-state (keymap-state))))))
+       (and (key-handler) ((key-handler) key))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
@@ -141,8 +140,9 @@
 
 ;; Function to set the key handler
 (define (make-key-decoder app-channel exit-channel)
-  (lambda (key xkb-state)
+  (lambda (key)
     (let* ((xkb-key (+ 8 key))
+           (xkb-state (keymap-state-xkb-state (keymap-state)))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
            (ctrl-pressed (not (zero? (logand (xkb-state-mod-name-is-active
                                               xkb-state
