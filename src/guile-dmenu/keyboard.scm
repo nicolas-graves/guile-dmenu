@@ -24,9 +24,6 @@
             wl-seat-listener-with-fibers
             make-key-decoder))
 
-(define %key-pressed  1)
-(define %key-released 0)
-
 (define-record-type <keymap-state>
   (make-keymap-state context keymap xkb-state) keymap-state?
   (context keymap-state-context)
@@ -58,9 +55,9 @@
                (lambda ()
                  (let loop ()
                    (match (get-message (key-event-channel))
-                     (('key key %key-pressed time)
+                     (('key key 1 time) ; key pressed
                       (handle-key-internal key))
-                     (('key key %key-released time)
+                     (('key key 0 time) ; key released
                       ;; Later: cancel repeat if it's for this key
                       #t)
                      ;; Update XKB state if available
