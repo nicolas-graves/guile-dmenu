@@ -72,76 +72,74 @@
               (let ((display (wayland-connection-display conn)))
                 (let loop ((current-state initial-program-state))
                   ;; Poll for events with timeout
-                  (let* ((op (choice-operation
-                              (get-operation app-channel)
-                              (wrap-operation (sleep-operation 0.001)
-                                              (lambda () 'timeout))))
-                         (next-state
-                          (match (perform-operation op)
-                            ;; ---- State Operations ----
-                            ('select
-                             (match (handle-select current-state)
-                               (('exit code)
-                                (put-message exit-channel code)
-                                current-state)
-                               (('no-change _)
-                                current-state)
-                               (_ current-state)))
+                  (loop
+                   (match (perform-operation
+                           (choice-operation
+                            (get-operation app-channel)
+                            (wrap-operation (sleep-operation 0.01)
+                                            (lambda () 'timeout))))
+                     ;; ---- State Operations ----
+                     ('select
+                      (match (handle-select current-state)
+                        (('exit code)
+                         (put-message exit-channel code)
+                         current-state)
+                        (('no-change _)
+                         current-state)
+                        (_ current-state)))
 
-                            ('next
-                             (match (handle-next current-state)
-                               (('state-update new-state)
-                                (draw prompt conn new-state max-options)
-                                (wl-display-flush display)
-                                new-state)
-                               (_ current-state)))
+                     ('next
+                      (match (handle-next current-state)
+                        (('state-update new-state)
+                         (draw prompt conn new-state max-options)
+                         (wl-display-flush display)
+                         new-state)
+                        (_ current-state)))
 
-                            ('previous
-                             (match (handle-previous current-state)
-                               (('state-update new-state)
-                                (draw prompt conn new-state max-options)
-                                (wl-display-flush display)
-                                new-state)
-                               (_ current-state)))
+                     ('previous
+                      (match (handle-previous current-state)
+                        (('state-update new-state)
+                         (draw prompt conn new-state max-options)
+                         (wl-display-flush display)
+                         new-state)
+                        (_ current-state)))
 
-                            ('backspace
-                             (match (handle-backspace current-state collection)
-                               (('state-update new-state)
-                                (pk 'input (completing-read-state-input-text new-state))
-                                (draw prompt conn new-state max-options)
-                                (wl-display-flush display)
-                                new-state)
-                               (('no-change _)
-                                current-state)
-                               (_ current-state)))
+                     ('backspace
+                      (match (handle-backspace current-state collection)
+                        (('state-update new-state)
+                         (pk 'input (completing-read-state-input-text new-state))
+                         (draw prompt conn new-state max-options)
+                         (wl-display-flush display)
+                         new-state)
+                        (('no-change _)
+                         current-state)
+                        (_ current-state)))
 
-                            (('input-char char)
-                             (match (handle-input-char char current-state collection)
-                               (('state-update new-state)
-                                (pk 'input (completing-read-state-input-text new-state))
-                                (draw prompt conn new-state max-options)
-                                (wl-display-flush display)
-                                new-state)
-                               (_ current-state)))
+                     (('input-char char)
+                      (match (handle-input-char char current-state collection)
+                        (('state-update new-state)
+                         (pk 'char:input (completing-read-state-input-text new-state))
+                         (draw prompt conn new-state max-options)
+                         (wl-display-flush display)
+                         new-state)
+                        (_ current-state)))
 
-                            ;; ---- Wayland Operations ----
-                            ('redraw
-                             (draw prompt conn current-state max-options)
-                             (wl-display-flush display)
-                             current-state)
+                     ;; ---- Wayland Operations ----
+                     ('redraw
+                      (draw prompt conn current-state max-options)
+                      (wl-display-flush display)
+                      current-state)
 
-                            ('surface-configure
-                             (draw prompt conn current-state max-options)
-                             (wl-display-flush display)
-                             current-state)
+                     ('surface-configure
+                      (draw prompt conn current-state max-options)
+                      (wl-display-flush display)
+                      current-state)
 
-                            ('timeout
-                             (wl-display-dispatch display)
-                             current-state)
+                     ('timeout
+                      (wl-display-roundtrip display)
+                      current-state)
 
-                            (_ current-state))))
-
-                    (loop next-state)))
+                     (_ current-state))))
                 #t)))
 
            ;; Initial draw request
