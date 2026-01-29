@@ -11,6 +11,7 @@
   #:use-module (fibers)
   #:use-module (fibers channels)
   #:use-module (fibers operations)
+  #:use-module (fibers timers)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
@@ -40,45 +41,56 @@
 (define (set-key-event-channel! channel)
   (key-event-channel channel))
 
+;; Repeat timing (in seconds)
+(define repeat-rate (make-parameter 0.05))
+
 (define (log . args)
   (apply format (current-error-port) args)
   (force-output (current-error-port)))
 
+;; --- Key decoding ---
+
 (define (process-keymap format fd size)
-  "Process a keymap received from the compositor."
+  "Process a keymap received from the compositor and spawn key event handler."
   (and (> size 0)
        (let* ((ctx (xkb-context-new))
               (data (mmap #f size PROT_READ MAP_SHARED fd 0))
               (keymap-string (utf8->string data))
-              (km (xkb-keymap-new ctx keymap-string))
-              (key-processor-fiber
-               (lambda ()
-                 (let loop ()
-                   (match (get-message (key-event-channel))
-                     (('key key 1 time) ; key pressed
-                      (handle-key-internal key))
-                     (('key key 0 time) ; key released
-                      ;; Later: cancel repeat if it's for this key
-                      #t)
-                     ;; Update XKB state if available
-                     (('modifiers depressed latched locked group)
-                      (and=> (keymap-state-xkb-state (keymap-state))
-                             (cut xkb-state-update-mask
-                                  <> depressed latched locked 0 0 group)))
-                     (args
-                      (pk 'unhandled args)))
-                   (pk 'key-processor-loop)
-                   (loop))
-                 #t)))
+              (km (xkb-keymap-new ctx keymap-string)))
          (munmap data)
          (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
-         (spawn-fiber key-processor-fiber))))
+         (spawn-fiber
+          (lambda ()
+            ;; repeat-key: #f or the key code that's repeating
+            (let loop ()
+              (match (perform-operation
+                      (choice-operation
+                       (get-operation (key-event-channel))
+                       (wrap-operation
+                        (sleep-operation (repeat-rate))
+                        (lambda () 'timeout))))
+                ;; Key press
+                (('key key 1 time)
+                 ;; Handle keyboard key events - keep the original signature
+                 (and (key-handler) ((key-handler) key)))
 
-;; Handle keyboard key events - keep the original signature
-(define (handle-key-internal key)
-  ;; Call the handler with both key and xkb-state
-  (pk 'handled key
-       (and (key-handler) ((key-handler) key))))
+                ;; Key release
+                (('key key 0 time)
+                 #t)
+
+                ;; Modifier change
+                (('modifiers depressed latched locked group)
+                 (and=> (keymap-state-xkb-state (keymap-state))
+                        (cut xkb-state-update-mask
+                             <> depressed latched locked 0 0 group)))
+
+                ;; Timeout - repeat the action if we're repeating
+                ('timeout
+                 #t)
+
+                (other
+                 (log "Unhandled key event: ~a~%" other)))
+              (loop)))))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
