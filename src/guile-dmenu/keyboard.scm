@@ -62,7 +62,7 @@
          (spawn-fiber
           (lambda ()
             ;; repeat-key: #f or the key code that's repeating
-            (let loop ()
+            (let loop ((repeat-key #f))
               (match (perform-operation
                       (choice-operation
                        (get-operation (key-event-channel))
@@ -72,25 +72,29 @@
                 ;; Key press
                 (('key key 1 time)
                  ;; Handle keyboard key events - keep the original signature
-                 (and (key-handler) ((key-handler) key)))
+                 (and (key-handler) ((key-handler) key))
+                 (loop key))
 
                 ;; Key release
                 (('key key 0 time)
-                 #t)
+                 #t
+                 (loop #f))
 
                 ;; Modifier change
                 (('modifiers depressed latched locked group)
                  (and=> (keymap-state-xkb-state (keymap-state))
                         (cut xkb-state-update-mask
-                             <> depressed latched locked 0 0 group)))
+                             <> depressed latched locked 0 0 group))
+                 (loop repeat-key))
 
                 ;; Timeout - repeat the action if we're repeating
                 ('timeout
-                 #t)
+                 (and=> repeat-key (key-handler))
+                 (loop repeat-key))
 
                 (other
-                 (log "Unhandled key event: ~a~%" other)))
-              (loop)))))))
+                 (log "Unhandled key event: ~a~%" other)
+                 (loop #f)))))))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
