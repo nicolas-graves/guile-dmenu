@@ -42,6 +42,7 @@
   (key-event-channel channel))
 
 ;; Repeat timing (in seconds)
+(define repeat-delay (make-parameter 0.5))
 (define repeat-rate (make-parameter 0.05))
 
 (define (log . args)
@@ -61,40 +62,39 @@
          (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
          (spawn-fiber
           (lambda ()
-            ;; repeat-key: #f or the key code that's repeating
-            (let loop ((repeat-key #f))
+            (let loop ((repeat-key #f) (first-repeat? #f))
               (match (perform-operation
                       (choice-operation
                        (get-operation (key-event-channel))
                        (wrap-operation
-                        (sleep-operation (repeat-rate))
+                        (sleep-operation (if first-repeat?
+                                             (repeat-delay)
+                                             (repeat-rate)))
                         (lambda () 'timeout))))
                 ;; Key press
                 (('key key 1 time)
-                 ;; Handle keyboard key events - keep the original signature
                  (and (key-handler) ((key-handler) key))
-                 (loop key))
+                 (loop key #t))  ; Start with initial delay
 
                 ;; Key release
                 (('key key 0 time)
-                 #t
-                 (loop #f))
+                 (loop #f #f))
 
                 ;; Modifier change
                 (('modifiers depressed latched locked group)
                  (and=> (keymap-state-xkb-state (keymap-state))
                         (cut xkb-state-update-mask
                              <> depressed latched locked 0 0 group))
-                 (loop repeat-key))
+                 (loop repeat-key first-repeat?))
 
                 ;; Timeout - repeat the action if we're repeating
                 ('timeout
                  (and=> repeat-key (key-handler))
-                 (loop repeat-key))
+                 (loop repeat-key #f))  ; After first repeat, use normal rate
 
                 (other
                  (log "Unhandled key event: ~a~%" other)
-                 (loop #f)))))))))
+                 (loop #f #f)))))))))
 
 ;; Fiber-aware keyboard listener
 (define wl-keyboard-listener-with-fibers
