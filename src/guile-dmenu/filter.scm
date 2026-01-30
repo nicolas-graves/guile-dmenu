@@ -1,5 +1,6 @@
 (define-module (guile-dmenu filter)
   #:use-module (ice-9 format)
+  #:use-module (ice-9 regex)
   #:use-module (srfi srfi-9)
   #:export (filter-options
             handle-select
@@ -41,6 +42,9 @@
   (let ((new-filtered (filter-options options new-text)))
     (make-completing-read-state new-text 0 new-filtered)))
 
+(define (string-delete-last-word str)
+  (regexp-substitute #f (string-match "\\s*\\S+\\s*$" str) 'pre))
+
 ;; Handle selection of current option
 (define (handle-select state)
   (let ((filtered-options (completing-read-state-filtered-options state))
@@ -76,11 +80,13 @@
                                         (completing-read-state-filtered-options state))))))
 
 ;; Handle backspace - delete last character
-(define (handle-backspace state options)
+(define* (handle-backspace state options #:key (ctrl-pressed? #f))
   (let ((input-text (completing-read-state-input-text state)))
     (if (string-null? input-text)
         (list 'no-change state)
-        (let ((new-text (string-drop-right input-text 1)))
+        (let ((new-text (if ctrl-pressed?
+                            (string-delete-last-word input-text)
+                            (string-drop-right input-text 1))))
           (list 'state-update (update-text-and-filter state new-text options))))))
 
 ;; Handle character input

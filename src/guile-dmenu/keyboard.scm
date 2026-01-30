@@ -183,6 +183,10 @@
             (and ctrl-pressed (= keysym XKB_KEY_p)))
         (put-message app-channel 'previous))
 
+       ;; Ctrl+Backspace - Delete last word
+       ((and ctrl-pressed (= keysym XKB_KEY_BackSpace))
+        (put-message app-channel 'ctrl+backspace))
+
        ;; Backspace - Delete last character
        ((= keysym XKB_KEY_BackSpace)
         (put-message app-channel 'backspace))

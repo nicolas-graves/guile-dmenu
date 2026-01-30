@@ -104,8 +104,10 @@
                          new-state)
                         (_ current-state)))
 
-                     ('backspace
-                      (match (handle-backspace current-state collection)
+                     ((and (or 'ctrl+backspace 'backspace) key)
+                      (match (handle-backspace current-state collection
+                                               #:ctrl-pressed?
+                                               (eq? key 'ctrl+backspace))
                         (('state-update new-state)
                          (pk 'input (completing-read-state-input-text new-state))
                          (draw prompt conn new-state max-options)
