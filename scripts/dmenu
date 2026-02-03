@@ -10,6 +10,7 @@
              (wayland client protocol xdg-shell)
              (ice-9 match)
              (ice-9 rdelim)
+             (ice-9 getopt-long)
              (fibers)
              (fibers channels)
              (fibers operations)
@@ -22,6 +23,12 @@
 ;; Configuration parameters - these don't change during execution
 (define width* (make-parameter 800))
 (define padding* (make-parameter 4))
+
+;; Command-line option spec
+(define option-spec
+  '((prompt    (single-char #\p) (value #t))
+    (nb        (value #t))  ; normal background
+    (nf        (value #t)))) ; normal foreground
 
 (define (draw prompt connection state max-options)
   (and-let* ((surface (and=> connection wayland-connection-surface))
@@ -181,5 +188,11 @@
 
      #:drain? #t)))
 
-(let ((prompt "dmenu: "))
+(let* ((options (getopt-long (command-line) option-spec))
+       (prompt (or (option-ref options 'prompt #f) "dmenu: "))
+       (nb (option-ref options 'nb #f))
+       (nf (option-ref options 'nf #f)))
+  ;; Set colors if provided
+  (when nb (background-color (parse-hex-color nb)))
+  (when nf (foreground-color (parse-hex-color nf)))
   (completing-read prompt (read-stdin)))

@@ -6,17 +6,27 @@
   #:use-module (cairo)
   #:use-module (oop goops)
   #:export (draw-menu
-            wl-buffer-listener))
+            wl-buffer-listener
+            background-color
+            foreground-color
+            parse-hex-color))
 
 (define WL_SHM_FORMAT_ARGB8888 0)
 
 ;; Cairo font settings
 (define font-face "Sans")
 (define font-size 14)
-(define background-color '(0.1 0.1 0.1))
-(define foreground-color '(0.9 0.9 0.9))
+(define background-color (make-parameter '(0.1 0.1 0.1)))
+(define foreground-color (make-parameter '(0.9 0.9 0.9)))
 (define selected-color '(0.4 0.4 0.8))
 (define input-color '(1.0 0.8 0.2))
+
+;; Parse hex color string (#RRGGBB) to RGB list (0.0-1.0)
+(define (parse-hex-color str)
+  (let ((s (if (string-prefix? "#" str) (substring str 1) str)))
+    (list (/ (string->number (substring s 0 2) 16) 255.0)
+          (/ (string->number (substring s 2 4) 16) 255.0)
+          (/ (string->number (substring s 4 6) 16) 255.0))))
 
 ;; Buffer listener for handling release events
 (define wl-buffer-listener
@@ -66,7 +76,7 @@
            (cr (cairo-create surface)))
 
       ;; Set background
-      (apply cairo-set-source-rgb cr background-color)
+      (apply cairo-set-source-rgb cr (background-color))
       (cairo-rectangle cr 0 0 width real-height)
       (cairo-fill cr)
 
@@ -82,7 +92,7 @@
              (x-position (+ padding prompt-x-advance 2)))
 
         ;; Draw input prompt
-        (apply cairo-set-source-rgb cr foreground-color)
+        (apply cairo-set-source-rgb cr (foreground-color))
         (cairo-move-to cr padding (/ (+ font-size item-height) 2))
         (cairo-show-text cr prompt)
 
@@ -95,7 +105,7 @@
         (let* ((input-extents (cairo-text-extents cr input-text))
                (input-width (cairo-text-extents:width input-extents))
                (cursor-x (+ x-position input-width 2)))
-          (apply cairo-set-source-rgb cr foreground-color)
+          (apply cairo-set-source-rgb cr (foreground-color))
           (cairo-rectangle cr cursor-x padding 2 (- item-height (/ (* 3 padding) 2)))
           (cairo-fill cr))
 
@@ -110,7 +120,7 @@
                 (cairo-rectangle cr 0 y width item-height)
                 (cairo-fill cr))
               ;; Draw item text
-              (apply cairo-set-source-rgb cr foreground-color)
+              (apply cairo-set-source-rgb cr (foreground-color))
               (cairo-move-to cr x-position (+ y (/ item-height 2) (/ font-size 2)))
               (cairo-show-text cr (car items))
               (loop (cdr items) (+ index 1))))))
