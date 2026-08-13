@@ -1,4 +1,4 @@
-#!/bin/guile
+#!/usr/bin/env guile
 !#
 (use-modules (guile-dmenu wayland)
              (guile-dmenu memory-utils)
@@ -64,14 +64,14 @@
 
     (run-fibers
      (lambda ()
-       (let ((app-channel (make-channel))
-             (exit-channel (make-channel))
-             (key-event-channel (make-channel)))
-         (set-key-handler! (make-key-decoder app-channel exit-channel))
-         (set-key-event-channel! key-event-channel)
+       (let ((session (make-keyboard-session))
+             (app-channel (make-channel))
+             (exit-channel (make-channel)))
+         (set-keyboard-session-key-handler!
+          session (make-key-decoder session app-channel exit-channel))
 
          (let ((initial-program-state (initial-state collection))
-               (conn (connect-wayland wl-seat-listener-with-fibers)))
+               (conn (connect-wayland (make-seat-listener session))))
 
            ;; Main application loop - processes all events and maintains state
            (spawn-fiber

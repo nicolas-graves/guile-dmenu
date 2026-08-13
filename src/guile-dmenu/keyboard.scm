@@ -15,14 +15,12 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
-  #:export (set-key-handler!
-            set-key-event-channel!
-            handle-key-internal
+  #:export (make-keyboard-session
+            keyboard-session?
+            set-keyboard-session-key-handler!
             process-keymap
-            wl-keyboard-listener
-            wl-seat-listener
-            wl-keyboard-listener-with-fibers
-            wl-seat-listener-with-fibers
+            make-keyboard-listener
+            make-seat-listener
             make-key-decoder))
 
 (define-record-type <keymap-state>
@@ -31,19 +29,21 @@
   (keymap keymap-state-keymap)
   (xkb-state keymap-state-xkb-state))
 
-(define keymap-state (make-parameter #f))
-(define key-event-channel (make-parameter #f))
-(define key-handler (make-parameter #f))
+;; Bundles the keyboard-related state for one completing-read session
+;; (channel, active handler, decoded keymap, repeat timing) so it can be
+;; threaded explicitly instead of living in process-wide parameters.
+(define-record-type <keyboard-session>
+  (%make-keyboard-session key-event-channel key-handler keymap-state
+                           repeat-delay repeat-rate)
+  keyboard-session?
+  (key-event-channel keyboard-session-key-event-channel)
+  (key-handler keyboard-session-key-handler set-keyboard-session-key-handler!)
+  (keymap-state keyboard-session-keymap-state set-keyboard-session-keymap-state!)
+  (repeat-delay keyboard-session-repeat-delay)
+  (repeat-rate keyboard-session-repeat-rate))
 
-(define (set-key-handler! handler)
-  (key-handler handler))
-
-(define (set-key-event-channel! channel)
-  (key-event-channel channel))
-
-;; Repeat timing (in seconds)
-(define repeat-delay (make-parameter 0.5))
-(define repeat-rate (make-parameter 0.05))
+(define* (make-keyboard-session #:key (repeat-delay 0.5) (repeat-rate 0.05))
+  (%make-keyboard-session (make-channel) #f #f repeat-delay repeat-rate))
 
 (define (log . args)
   (apply format (current-error-port) args)
@@ -51,7 +51,7 @@
 
 ;; --- Key decoding ---
 
-(define (process-keymap format fd size)
+(define (process-keymap session format fd size)
   "Process a keymap received from the compositor and spawn key event handler."
   (and (> size 0)
        (let* ((ctx (xkb-context-new))
@@ -59,21 +59,22 @@
               (keymap-string (utf8->string data))
               (km (xkb-keymap-new ctx keymap-string)))
          (munmap data)
-         (keymap-state (make-keymap-state ctx km (xkb-state-new km)))
+         (set-keyboard-session-keymap-state! session (make-keymap-state ctx km (xkb-state-new km)))
          (spawn-fiber
           (lambda ()
             (let loop ((repeat-key #f) (first-repeat? #f))
               (match (perform-operation
                       (choice-operation
-                       (get-operation (key-event-channel))
+                       (get-operation (keyboard-session-key-event-channel session))
                        (wrap-operation
                         (sleep-operation (if first-repeat?
-                                             (repeat-delay)
-                                             (repeat-rate)))
+                                             (keyboard-session-repeat-delay session)
+                                             (keyboard-session-repeat-rate session)))
                         (lambda () 'timeout))))
                 ;; Key press
                 (('key key 1 time)
-                 (and (key-handler) ((key-handler) key))
+                 (and (keyboard-session-key-handler session)
+                      ((keyboard-session-key-handler session) key))
                  (loop key #t))  ; Start with initial delay
 
                 ;; Key release
@@ -82,26 +83,26 @@
 
                 ;; Modifier change
                 (('modifiers depressed latched locked group)
-                 (and=> (keymap-state-xkb-state (keymap-state))
+                 (and=> (keymap-state-xkb-state (keyboard-session-keymap-state session))
                         (cut xkb-state-update-mask
                              <> depressed latched locked 0 0 group))
                  (loop repeat-key first-repeat?))
 
                 ;; Timeout - repeat the action if we're repeating
                 ('timeout
-                 (and=> repeat-key (key-handler))
+                 (and=> repeat-key (keyboard-session-key-handler session))
                  (loop repeat-key #f))  ; After first repeat, use normal rate
 
                 (other
                  (log "Unhandled key event: ~a~%" other)
                  (loop #f #f)))))))))
 
-;; Fiber-aware keyboard listener
-(define wl-keyboard-listener-with-fibers
+;; Fiber-aware keyboard listener, scoped to a single keyboard session
+(define (make-keyboard-listener session)
   (make <wl-keyboard-listener>
     #:keymap
     (lambda (data keyboard format fd size)
-      (process-keymap format fd size)
+      (process-keymap session format fd size)
       (when (> fd 0)
         (close-fdes fd)))
 
@@ -120,7 +121,7 @@
       ;; Instead, spawn a fiber to do it
       (spawn-fiber
        (lambda ()
-         (put-message (key-event-channel) `(key ,key ,state ,time))))
+         (put-message (keyboard-session-key-event-channel session) `(key ,key ,state ,time))))
       #t)
 
     #:modifiers
@@ -128,7 +129,7 @@
       ;; Spawn a fiber to put the message
       (spawn-fiber
        (lambda ()
-         (put-message (key-event-channel)
+         (put-message (keyboard-session-key-event-channel session)
                       `(modifiers ,mods-depressed ,mods-latched ,mods-locked ,group))))
       #t)
 
@@ -136,26 +137,26 @@
     (lambda (data keyboard rate delay)
       #t)))
 
-;; Fiber-aware seat listener
-(define wl-seat-listener-with-fibers
+;; Fiber-aware seat listener, scoped to a single keyboard session
+(define (make-seat-listener session)
   (make <wl-seat-listener>
     #:capabilities
     (lambda (data seat capabilities)
       ;; Check if keyboard capability is available (bit 1)
       (when (logand capabilities 2)
         (wl-keyboard-add-listener (wl-seat-get-keyboard seat)
-                                  wl-keyboard-listener-with-fibers))
+                                  (make-keyboard-listener session)))
       #t)
 
     #:name
     (lambda (data seat name)
       #t)))
 
-;; Function to set the key handler
-(define (make-key-decoder app-channel exit-channel)
+;; Function to build the key handler for a session
+(define (make-key-decoder session app-channel exit-channel)
   (lambda (key)
     (let* ((xkb-key (+ 8 key))
-           (xkb-state (keymap-state-xkb-state (keymap-state)))
+           (xkb-state (keymap-state-xkb-state (keyboard-session-keymap-state session)))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
            (ctrl-pressed (not (zero? (logand (xkb-state-mod-name-is-active
                                               xkb-state
