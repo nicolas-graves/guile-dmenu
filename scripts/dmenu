@@ -14,7 +14,7 @@
              (fibers)
              (fibers channels)
              (fibers operations)
-             (fibers timers)
+             (fibers io-wakeup)
              (srfi srfi-2))
 
 ;; Prevent GC to avoid potential segment faults during drawing
@@ -70,21 +70,22 @@
          (set-keyboard-session-key-handler!
           session (make-key-decoder session app-channel exit-channel))
 
-         (let ((initial-program-state (initial-state collection))
-               (conn (connect-wayland (make-seat-listener session))))
+         (let* ((initial-program-state (initial-state collection))
+                (conn (connect-wayland (make-seat-listener session)))
+                (display (wayland-connection-display conn))
+                (wayland-port (fdes->inport (wl-display-get-fd display))))
 
            ;; Main application loop - processes all events and maintains state
            (spawn-fiber
             (lambda ()
-              (let ((display (wayland-connection-display conn)))
                 (let loop ((current-state initial-program-state))
-                  ;; Poll for events with timeout
+                ;; Block on either an app-level message or Wayland socket activity
                   (loop
                    (match (perform-operation
                            (choice-operation
                             (get-operation app-channel)
-                            (wrap-operation (sleep-operation 0.01)
-                                            (lambda () 'timeout))))
+                          (wrap-operation (wait-until-port-readable-operation wayland-port)
+                                          (lambda () 'wayland-readable))))
                      ;; ---- State Operations ----
                      ('select
                       (match (handle-select current-state)
@@ -144,12 +145,12 @@
                       (wl-display-flush display)
                       current-state)
 
-                     ('timeout
-                      (wl-display-roundtrip display)
+                   ('wayland-readable
+                    (wl-display-dispatch display)
                       current-state)
 
                      (_ current-state))))
-                #t)))
+              #t))
 
            ;; Initial draw request
            (put-message app-channel 'redraw)
