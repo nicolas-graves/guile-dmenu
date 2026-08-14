@@ -34,16 +34,19 @@
 ;; threaded explicitly instead of living in process-wide parameters.
 (define-record-type <keyboard-session>
   (%make-keyboard-session key-event-channel key-handler keymap-state
-                           repeat-delay repeat-rate)
+                           repeat-delay repeat-rate keyboard-listener)
   keyboard-session?
   (key-event-channel keyboard-session-key-event-channel)
   (key-handler keyboard-session-key-handler set-keyboard-session-key-handler!)
   (keymap-state keyboard-session-keymap-state set-keyboard-session-keymap-state!)
   (repeat-delay keyboard-session-repeat-delay)
-  (repeat-rate keyboard-session-repeat-rate))
+  (repeat-rate keyboard-session-repeat-rate)
+  ;; Kept alive here so its FFI callback trampoline isn't GC'd out from
+  ;; under libwayland, which holds only a raw address into this listener.
+  (keyboard-listener keyboard-session-keyboard-listener set-keyboard-session-keyboard-listener!))
 
 (define* (make-keyboard-session #:key (repeat-delay 0.5) (repeat-rate 0.05))
-  (%make-keyboard-session (make-channel) #f #f repeat-delay repeat-rate))
+  (%make-keyboard-session (make-channel) #f #f repeat-delay repeat-rate #f))
 
 (define (log . args)
   (apply format (current-error-port) args)
@@ -144,8 +147,9 @@
     (lambda (data seat capabilities)
       ;; Check if keyboard capability is available (bit 1)
       (when (logand capabilities 2)
-        (wl-keyboard-add-listener (wl-seat-get-keyboard seat)
-                                  (make-keyboard-listener session)))
+        (let ((kl (make-keyboard-listener session)))
+          (set-keyboard-session-keyboard-listener! session kl)
+          (wl-keyboard-add-listener (wl-seat-get-keyboard seat) kl)))
       #t)
 
     #:name

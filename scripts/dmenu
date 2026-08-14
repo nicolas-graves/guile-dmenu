@@ -17,9 +17,6 @@
              (fibers io-wakeup)
              (srfi srfi-2))
 
-;; Prevent GC to avoid potential segment faults during drawing
-(gc-disable)
-
 ;; Configuration parameters - these don't change during execution
 (define width* (make-parameter 800))
 (define padding* (make-parameter 4))
@@ -78,78 +75,78 @@
            ;; Main application loop - processes all events and maintains state
            (spawn-fiber
             (lambda ()
-                (let loop ((current-state initial-program-state))
+              (let loop ((current-state initial-program-state))
                 ;; Block on either an app-level message or Wayland socket activity
-                  (loop
-                   (match (perform-operation
-                           (choice-operation
-                            (get-operation app-channel)
+                (loop
+                 (match (perform-operation
+                         (choice-operation
+                          (get-operation app-channel)
                           (wrap-operation (wait-until-port-readable-operation wayland-port)
                                           (lambda () 'wayland-readable))))
-                     ;; ---- State Operations ----
-                     ('select
-                      (match (handle-select current-state)
-                        (('exit code)
-                         (put-message exit-channel code)
-                         current-state)
-                        (('no-change _)
-                         current-state)
-                        (_ current-state)))
+                   ;; ---- State Operations ----
+                   ('select
+                    (match (handle-select current-state)
+                      (('exit code)
+                       (put-message exit-channel code)
+                       current-state)
+                      (('no-change _)
+                       current-state)
+                      (_ current-state)))
 
-                     ('next
-                      (match (handle-next current-state)
-                        (('state-update new-state)
-                         (draw prompt conn new-state max-options)
-                         (wl-display-flush display)
-                         new-state)
-                        (_ current-state)))
+                   ('next
+                    (match (handle-next current-state)
+                      (('state-update new-state)
+                       (draw prompt conn new-state max-options)
+                       (wl-display-flush display)
+                       new-state)
+                      (_ current-state)))
 
-                     ('previous
-                      (match (handle-previous current-state)
-                        (('state-update new-state)
-                         (draw prompt conn new-state max-options)
-                         (wl-display-flush display)
-                         new-state)
-                        (_ current-state)))
+                   ('previous
+                    (match (handle-previous current-state)
+                      (('state-update new-state)
+                       (draw prompt conn new-state max-options)
+                       (wl-display-flush display)
+                       new-state)
+                      (_ current-state)))
 
-                     ((and (or 'ctrl+backspace 'backspace) key)
-                      (match (handle-backspace current-state collection
-                                               #:ctrl-pressed?
-                                               (eq? key 'ctrl+backspace))
-                        (('state-update new-state)
-                         (pk 'input (completing-read-state-input-text new-state))
-                         (draw prompt conn new-state max-options)
-                         (wl-display-flush display)
-                         new-state)
-                        (('no-change _)
-                         current-state)
-                        (_ current-state)))
+                   ((and (or 'ctrl+backspace 'backspace) key)
+                    (match (handle-backspace current-state collection
+                                             #:ctrl-pressed?
+                                             (eq? key 'ctrl+backspace))
+                      (('state-update new-state)
+                       (pk 'input (completing-read-state-input-text new-state))
+                       (draw prompt conn new-state max-options)
+                       (wl-display-flush display)
+                       new-state)
+                      (('no-change _)
+                       current-state)
+                      (_ current-state)))
 
-                     (('input-char char)
-                      (match (handle-input-char char current-state collection)
-                        (('state-update new-state)
-                         (pk 'char:input (completing-read-state-input-text new-state))
-                         (draw prompt conn new-state max-options)
-                         (wl-display-flush display)
-                         new-state)
-                        (_ current-state)))
+                   (('input-char char)
+                    (match (handle-input-char char current-state collection)
+                      (('state-update new-state)
+                       (pk 'char:input (completing-read-state-input-text new-state))
+                       (draw prompt conn new-state max-options)
+                       (wl-display-flush display)
+                       new-state)
+                      (_ current-state)))
 
-                     ;; ---- Wayland Operations ----
-                     ('redraw
-                      (draw prompt conn current-state max-options)
-                      (wl-display-flush display)
-                      current-state)
+                   ;; ---- Wayland Operations ----
+                   ('redraw
+                    (draw prompt conn current-state max-options)
+                    (wl-display-flush display)
+                    current-state)
 
-                     ('surface-configure
-                      (draw prompt conn current-state max-options)
-                      (wl-display-flush display)
-                      current-state)
+                   ('surface-configure
+                    (draw prompt conn current-state max-options)
+                    (wl-display-flush display)
+                    current-state)
 
                    ('wayland-readable
                     (wl-display-dispatch display)
-                      current-state)
+                    current-state)
 
-                     (_ current-state))))
+                   (_ current-state))))
               #t))
 
            ;; Initial draw request

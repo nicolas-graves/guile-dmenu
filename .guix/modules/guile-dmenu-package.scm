@@ -21,17 +21,56 @@
   ((package-input-rewriting/spec
     `(("guile" . ,(const guile-next))))
    (package/inherit guile-bytestructure-class
+     (source
+      (origin
+        (inherit (package-source guile-bytestructure-class))
+        (patches
+         (list
+          (origin
+            (method url-fetch)
+            (uri
+             (string-append "https://github.com/Z572/guile-bytestructure-class"
+                            "/commit/"
+                            "87a2c7cd02305e4020be8226988128eff81d6ae4.patch"))
+            (sha256
+             (base32 "17mp7243djdslhimk3dps9svsjy5n2m28h9w9abjl2bp9z15xnak")))))))
      (arguments
       ;; XXX: guile-next breaks one test.
       (list #:tests? #f
             #:make-flags #~'("GUILE_AUTO_COMPILE=0"))))))
 
+(define-public guile-wayland-next
+  (package/inherit guile-wayland
+    (source
+     (origin
+       (inherit (package-source guile-wayland))
+       (patches
+        (list
+         (origin
+           (method url-fetch)
+           (uri
+            (string-append "https://github.com/guile-wayland/guile-wayland"
+                           "/commit/"
+                           "cbc3e344a85fc243734d68d20a4013b55ed9596b.patch"))
+           (sha256
+            (base32 "1wlbkb6xphjlj7br5rzjl2cjjs5gky7fh224fm94gncgqdg3d1pc")))
+         (origin
+           (method url-fetch)
+           (uri
+            (string-append "https://github.com/guile-wayland/guile-wayland"
+                           "/commit/"
+                           "df85dee5d4bb5d55685944ab44033c172fc582ec.patch"))
+           (sha256
+            (base32 "1nfzjmf2whv4gbvialg5zrbks2am9dr1awkjn6yk2ny6awp35kx9")))))))))
+
 (define next
   (package-input-rewriting/spec
    `(("guile" . ,(const guile-next))
      ("guile-bytestructure-class" . ,(const guile-bytestructure-class-next))
+     ("guile-wayland" . ,(const guile-wayland-next))
      ;; Don't try to rebuild those.
      ("swig" . ,(const (@ (gnu packages swig) swig)))
+     ("libxkbcommon" . ,(const (@ (gnu packages xdisorg) libxkbcommon)))
      ("graphviz" . ,(const (@ (gnu packages graphviz) graphviz))))))
 
 (define-public guile-dmenu-devel
@@ -40,7 +79,7 @@
          (head (repository-head repo))
          (oid (reference-target head))
          (commit (oid->string (commit-id (commit-lookup repo oid))))
-         (revision "19"))
+         (revision "20"))
     (package
       (name "guile-dmenu")
       (version (git-version "0.0.0" revision commit))
@@ -81,7 +120,7 @@ completing-read procedure.")
       (license license:gpl3+))))
 
 (match (cadr (command-line))
-  ("build" guile-dmenu-devel)
+  ("build" (next guile-dmenu-devel))
   ("shell" (concatenate-manifests
             (list (package->development-manifest (next guile-dmenu))
                   (packages->manifest

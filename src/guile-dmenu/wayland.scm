@@ -24,7 +24,9 @@
 ;; Define a record type to hold all Wayland-related objects
 (define-record-type <wayland-connection>
   (make-wayland-connection display compositor shm xdg-wm-base seat
-                          surface xdg-surface xdg-toplevel)
+                          surface xdg-surface xdg-toplevel
+                          registry-listener xdg-wm-base-listener seat-listener
+                          xdg-surface-listener xdg-toplevel-listener)
   wayland-connection?
   (display wayland-connection-display set-wayland-connection-display!)
   (compositor wayland-connection-compositor set-wayland-connection-compositor!)
@@ -33,11 +35,18 @@
   (seat wayland-connection-seat set-wayland-connection-seat!)
   (surface wayland-connection-surface set-wayland-connection-surface!)
   (xdg-surface wayland-connection-xdg-surface set-wayland-connection-xdg-surface!)
-  (xdg-toplevel wayland-connection-xdg-toplevel set-wayland-connection-xdg-toplevel!))
+  (xdg-toplevel wayland-connection-xdg-toplevel set-wayland-connection-xdg-toplevel!)
+  ;; Kept alive here so their FFI callback trampolines aren't GC'd out from
+  ;; under libwayland, which holds only raw addresses into these listeners.
+  (registry-listener wayland-connection-registry-listener set-wayland-connection-registry-listener!)
+  (xdg-wm-base-listener wayland-connection-xdg-wm-base-listener set-wayland-connection-xdg-wm-base-listener!)
+  (seat-listener wayland-connection-seat-listener set-wayland-connection-seat-listener!)
+  (xdg-surface-listener wayland-connection-xdg-surface-listener set-wayland-connection-xdg-surface-listener!)
+  (xdg-toplevel-listener wayland-connection-xdg-toplevel-listener set-wayland-connection-xdg-toplevel-listener!))
 
 ;; Connect to Wayland and set up all needed global objects
 (define (connect-wayland seat-listener)
-  (let ((conn (make-wayland-connection #f #f #f #f #f #f #f #f))
+  (let ((conn (make-wayland-connection #f #f #f #f #f #f #f #f #f #f #f #f #f))
         (w-display (wl-display-connect)))
 
     (unless w-display
@@ -45,6 +54,7 @@
       (exit -1))
 
     (set-wayland-connection-display! conn w-display)
+    (set-wayland-connection-seat-listener! conn seat-listener)
 
     ;; Get registry and set up listeners
     (let ((registry (wl-display-get-registry w-display))
@@ -69,13 +79,14 @@
                           ("xdg_wm_base"
                            (let ((xdg-wm-base
                                   (wrap-xdg-wm-base
-                                   (wl-registry-bind registry name %xdg-wm-base-interface 1))))
+                                   (wl-registry-bind registry name %xdg-wm-base-interface 1)))
+                                 (xdg-wm-base-listener
+                                  (make <xdg-wm-base-listener>
+                                    #:ping (lambda (data base serial)
+                                             (xdg-wm-base-pong base serial)))))
                              (set-wayland-connection-xdg-wm-base! conn xdg-wm-base)
-                             (xdg-wm-base-add-listener
-                              xdg-wm-base
-                              (make <xdg-wm-base-listener>
-                                #:ping (lambda (data base serial)
-                                         (xdg-wm-base-pong base serial))))))
+                             (set-wayland-connection-xdg-wm-base-listener! conn xdg-wm-base-listener)
+                             (xdg-wm-base-add-listener xdg-wm-base xdg-wm-base-listener)))
 
                           ("wl_seat"
                            (let ((seat (wrap-wl-seat
@@ -90,6 +101,7 @@
                         #t))))
 
       ;; Add listener to registry
+      (set-wayland-connection-registry-listener! conn listener)
       (wl-registry-add-listener registry listener)
       (wl-display-roundtrip w-display)
 
@@ -112,10 +124,11 @@
                        surface)))
 
     ;; Set up XDG surface listener
-    (xdg-surface-add-listener
-     xdg-surface
-     (make <xdg-surface-listener>
-       #:configure xdg-surface-configure-callback))
+    (let ((xdg-surface-listener
+           (make <xdg-surface-listener>
+             #:configure xdg-surface-configure-callback)))
+      (set-wayland-connection-xdg-surface-listener! conn xdg-surface-listener)
+      (xdg-surface-add-listener xdg-surface xdg-surface-listener))
 
     ;; Store surface and create XDG toplevel
     (set-wayland-connection-surface! conn surface)
@@ -129,11 +142,12 @@
       (xdg-toplevel-set-app-id xdg-toplevel app-id)
 
       ;; Set up toplevel listener
-      (xdg-toplevel-add-listener
-       xdg-toplevel
-       (make <xdg-toplevel-listener>
-         #:configure xdg-toplevel-configure-callback
-         #:close xdg-toplevel-close-callback))
+      (let ((xdg-toplevel-listener
+             (make <xdg-toplevel-listener>
+               #:configure xdg-toplevel-configure-callback
+               #:close xdg-toplevel-close-callback)))
+        (set-wayland-connection-xdg-toplevel-listener! conn xdg-toplevel-listener)
+        (xdg-toplevel-add-listener xdg-toplevel xdg-toplevel-listener))
 
       (wl-surface-commit surface)
 
