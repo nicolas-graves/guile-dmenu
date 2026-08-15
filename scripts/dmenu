@@ -27,18 +27,17 @@
     (nb        (value #t))  ; normal background
     (nf        (value #t)))) ; normal foreground
 
-(define (draw prompt connection state max-options)
+(define (draw prompt connection buffer-cache state max-options)
   (and-let* ((surface (and=> connection wayland-connection-surface))
              (input-text (completing-read-state-input-text state))
              (options (completing-read-state-filtered-options state))
              (selected-index (completing-read-state-selected-index state))
-             (shm (wayland-connection-shm connection))
              (height (* (+ 1 (min (length options) max-options))
                         (+ 14 (* 2 (padding*)))))
              (buffer (draw-menu (width*)
                                 height
                                 (padding*)
-                                shm
+                                buffer-cache
                                 prompt
                                 input-text
                                 selected-index
@@ -68,9 +67,17 @@
           session (make-key-decoder session app-channel exit-channel))
 
          (let* ((initial-program-state (initial-state collection))
-                (conn (connect-wayland (make-seat-listener session)))
-                (display (wayland-connection-display conn))
-                (wayland-port (fdes->inport (wl-display-get-fd display))))
+               (conn (connect-wayland (make-seat-listener session)))
+               (display (wayland-connection-display conn))
+               (wayland-port (fdes->inport (wl-display-get-fd display)))
+               (buffer-cache
+                (make-menu-buffer-cache
+                 (wayland-connection-shm conn)
+                 #:request-redraw
+                 (lambda ()
+                   (spawn-fiber
+                    (lambda ()
+                      (put-message app-channel 'redraw)))))))
 
            ;; Main application loop - processes all events and maintains state
            (spawn-fiber
@@ -96,7 +103,7 @@
                    ('next
                     (match (handle-next current-state)
                       (('state-update new-state)
-                       (draw prompt conn new-state max-options)
+                       (draw prompt conn buffer-cache new-state max-options)
                        (wl-display-flush display)
                        new-state)
                       (_ current-state)))
@@ -104,7 +111,7 @@
                    ('previous
                     (match (handle-previous current-state)
                       (('state-update new-state)
-                       (draw prompt conn new-state max-options)
+                       (draw prompt conn buffer-cache new-state max-options)
                        (wl-display-flush display)
                        new-state)
                       (_ current-state)))
@@ -115,7 +122,7 @@
                                              (eq? key 'ctrl+backspace))
                       (('state-update new-state)
                        (pk 'input (completing-read-state-input-text new-state))
-                       (draw prompt conn new-state max-options)
+                       (draw prompt conn buffer-cache new-state max-options)
                        (wl-display-flush display)
                        new-state)
                       (('no-change _)
@@ -126,19 +133,19 @@
                     (match (handle-input-char char current-state collection)
                       (('state-update new-state)
                        (pk 'char:input (completing-read-state-input-text new-state))
-                       (draw prompt conn new-state max-options)
+                       (draw prompt conn buffer-cache new-state max-options)
                        (wl-display-flush display)
                        new-state)
                       (_ current-state)))
 
                    ;; ---- Wayland Operations ----
                    ('redraw
-                    (draw prompt conn current-state max-options)
+                    (draw prompt conn buffer-cache current-state max-options)
                     (wl-display-flush display)
                     current-state)
 
                    ('surface-configure
-                    (draw prompt conn current-state max-options)
+                    (draw prompt conn buffer-cache current-state max-options)
                     (wl-display-flush display)
                     current-state)
 

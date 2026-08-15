@@ -24,6 +24,8 @@ in your Sway configuration for the expected result (otherwise Sway will take ove
 - [ ] Compatibility with the bemenu API / configuration library
 - [X] Repeat
 - [ ] Check some corner cases / handle all data sent as configuration by the compositor
+- [ ] No pointer/mouse support (no wl_pointer listener, no click-to-select)
+- [ ] No text overflow handling when drawing (long input/item text draws off-window, no ellipsis/clip/scroll)
 
 ** Differences with dmenu-like programs ?
 - Powered by guile
