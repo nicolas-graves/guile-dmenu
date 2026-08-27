@@ -34,19 +34,20 @@
 ;; threaded explicitly instead of living in process-wide parameters.
 (define-record-type <keyboard-session>
   (%make-keyboard-session key-event-channel key-handler keymap-state
-                           repeat-delay repeat-rate keyboard-listener)
+                           repeat-delay repeat-rate keyboard keyboard-listener)
   keyboard-session?
   (key-event-channel keyboard-session-key-event-channel)
   (key-handler keyboard-session-key-handler set-keyboard-session-key-handler!)
   (keymap-state keyboard-session-keymap-state set-keyboard-session-keymap-state!)
   (repeat-delay keyboard-session-repeat-delay)
   (repeat-rate keyboard-session-repeat-rate)
+  (keyboard keyboard-session-keyboard set-keyboard-session-keyboard!)
   ;; Kept alive here so its FFI callback trampoline isn't GC'd out from
   ;; under libwayland, which holds only a raw address into this listener.
   (keyboard-listener keyboard-session-keyboard-listener set-keyboard-session-keyboard-listener!))
 
 (define* (make-keyboard-session #:key (repeat-delay 0.5) (repeat-rate 0.05))
-  (%make-keyboard-session (make-channel) #f #f repeat-delay repeat-rate #f))
+  (%make-keyboard-session (make-channel) #f #f repeat-delay repeat-rate #f #f))
 
 (define (log . args)
   (apply format (current-error-port) args)
@@ -145,11 +146,22 @@
   (make <wl-seat-listener>
     #:capabilities
     (lambda (data seat capabilities)
-      ;; Check if keyboard capability is available (bit 1)
-      (when (logand capabilities 2)
-        (let ((kl (make-keyboard-listener session)))
-          (set-keyboard-session-keyboard-listener! session kl)
-          (wl-keyboard-add-listener (wl-seat-get-keyboard seat) kl)))
+      ;; wl-seat.capability.keyboard is bit 1.  In Scheme, zero is true, so
+      ;; test it explicitly and only create a keyboard on the absent->present
+      ;; transition.
+      (let ((keyboard-capable? (not (zero? (logand capabilities 2))))
+            (keyboard (keyboard-session-keyboard session)))
+        (cond
+         ((and keyboard-capable? (not keyboard))
+          (let ((new-keyboard (wl-seat-get-keyboard seat))
+                (listener (make-keyboard-listener session)))
+            (set-keyboard-session-keyboard! session new-keyboard)
+            (set-keyboard-session-keyboard-listener! session listener)
+            (wl-keyboard-add-listener new-keyboard listener)))
+         ((and (not keyboard-capable?) keyboard)
+          (wl-keyboard-release keyboard)
+          (set-keyboard-session-keyboard! session #f)
+          (set-keyboard-session-keyboard-listener! session #f))))
       #t)
 
     #:name
