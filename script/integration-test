@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+river_dir=${GUILE_RIVER_DIR:-"$project_dir/../guile-river"}
+
+test -f "$river_dir/manifest.scm"
+dmenu=$(guix build -f "$project_dir/.guix/modules/guile-dmenu-package.scm")
+
+guix shell -m "$river_dir/manifest.scm" -- env \
+  GUILE_DMENU="$dmenu/bin/dmenu" \
+  GUILE_RIVER_DIR="$river_dir" \
+  GUILE_LOAD_COMPILED_PATH= \
+  GUILE_WAYLAND_PROTOCOL_PATH="$river_dir/protocol" \
+  guile --no-auto-compile \
+    -L "$river_dir/src" -L "$river_dir/tests" \
+    "$project_dir/tests/integration-test.scm"
