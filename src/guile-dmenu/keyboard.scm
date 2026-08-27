@@ -55,6 +55,11 @@
 
 ;; --- Key decoding ---
 
+(define (unicode-scalar-value? value)
+  (and (> value 0)
+       (<= value #x10FFFF)
+       (or (< value #xD800) (> value #xDFFF))))
+
 (define (process-keymap session format fd size)
   "Process a keymap received from the compositor and spawn key event handler."
   (and (> size 0)
@@ -212,6 +217,6 @@
        (else
         (unless ctrl-pressed
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
-            (when (and (> utf32 0) (<= utf32 #xD7FF)) ; Valid Unicode range
+            (when (unicode-scalar-value? utf32)
               (put-message app-channel `(input-char ,(integer->char utf32))))))))
       #t)))
