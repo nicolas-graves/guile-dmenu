@@ -20,22 +20,39 @@
 ;; Configuration parameters - these don't change during execution
 (define width* (make-parameter 800))
 (define padding* (make-parameter 4))
+;; Max number of items shown at once (-l/--list). #f means show all matches.
+(define max-options* (make-parameter #f))
 
-;; Command-line option spec
+;; Command-line option spec. Color/layout flags follow bemenu's naming so
+;; existing bemenu configs are trivially portable.
 (define option-spec
-  '((prompt    (single-char #\p) (value #t))
-    (nb        (value #t))  ; normal background
-    (nf        (value #t)))) ; normal foreground
+  '((prompt      (single-char #\p) (value #t))
+    (list        (single-char #\l) (value #t))  ; max visible items
+    (wrap        (single-char #\w) (value #f))  ; wrap navigation at ends
+    (prefix      (single-char #\P) (value #t))  ; text before selected item
+    (border      (single-char #\B) (value #t))  ; border width in pixels
+    (fixed-height (value #f))                   ; don't resize on filter
+    (line-height (value #t))                    ; override row height
+    (nb          (value #t))  ; normal background
+    (nf          (value #t))  ; normal foreground
+    (hb          (value #t))  ; highlighted (selected) background
+    (hf          (value #t))  ; highlighted (selected) foreground
+    (fb          (value #t))  ; filter (input line) background
+    (ff          (value #t))  ; filter (input line) foreground
+    (cb          (value #t))  ; cursor color
+    (tb          (value #t))  ; title (prompt badge) background
+    (tf          (value #t))  ; title (prompt badge) foreground
+    (ab          (value #t))  ; alternating row background
+    (af          (value #t))  ; alternating row foreground
+    (bdr         (value #t)))) ; border color
 
 (define (draw prompt connection buffer-cache state max-options)
   (and-let* ((surface (and=> connection wayland-connection-surface))
              (input-text (completing-read-state-input-text state))
              (options (completing-read-state-filtered-options state))
              (selected-index (completing-read-state-selected-index state))
-             (height (* (+ 1 (min (length options) max-options))
-                        (+ 14 (* 2 (padding*)))))
              (buffer (draw-menu (width*)
-                                height
+                                (menu-height (padding*) (length options) max-options)
                                 (padding*)
                                 buffer-cache
                                 prompt
@@ -56,7 +73,7 @@
         (loop (read-line) (cons line options)))))
 
 (define (completing-read prompt collection)
-  (let ((max-options (length collection)))
+  (let ((max-options (or (max-options*) (length collection))))
 
     (run-fibers
      (lambda ()
@@ -193,11 +210,37 @@
 
      #:drain? #t)))
 
+(define color-option-spec
+  ;; (option-name . parameter) for all bemenu-style color flags.
+  (list (cons 'nb background-color)
+        (cons 'nf foreground-color)
+        (cons 'hb highlight-background-color)
+        (cons 'hf highlight-foreground-color)
+        (cons 'fb filter-background-color)
+        (cons 'ff filter-foreground-color)
+        (cons 'cb cursor-color)
+        (cons 'tb title-background-color)
+        (cons 'tf title-foreground-color)
+        (cons 'ab alt-background-color)
+        (cons 'af alt-foreground-color)
+        (cons 'bdr border-color)))
+
 (let* ((options (getopt-long (command-line) option-spec))
-       (prompt (or (option-ref options 'prompt #f) "dmenu: "))
-       (nb (option-ref options 'nb #f))
-       (nf (option-ref options 'nf #f)))
-  ;; Set colors if provided
-  (when nb (background-color (parse-hex-color nb)))
-  (when nf (foreground-color (parse-hex-color nf)))
+       (prompt (or (option-ref options 'prompt #f) "dmenu: ")))
+  ;; Colors
+  (for-each (match-lambda
+              ((name . param)
+               (and=> (option-ref options name #f)
+                      (lambda (hex) (param (parse-hex-color hex))))))
+            color-option-spec)
+  ;; Layout / behavior
+  (and=> (option-ref options 'list #f)
+         (lambda (n) (max-options* (string->number n))))
+  (and=> (option-ref options 'border #f)
+         (lambda (n) (border-width (string->number n))))
+  (and=> (option-ref options 'line-height #f)
+         (lambda (n) (line-height (string->number n))))
+  (and=> (option-ref options 'prefix #f) prefix-text)
+  (when (option-ref options 'wrap #f) (wrap-navigation? #t))
+  (when (option-ref options 'fixed-height #f) (fixed-height? #t))
   (completing-read prompt (read-stdin)))

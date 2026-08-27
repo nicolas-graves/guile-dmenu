@@ -8,6 +8,7 @@
             handle-previous
             handle-backspace
             handle-input-char
+            wrap-navigation?
             ;; State record exports
             make-completing-read-state
             completing-read-state?
@@ -27,6 +28,10 @@
 ;; Create initial state
 (define (initial-state options)
   (make-completing-read-state "" 0 options))
+
+;; When enabled, moving past either end of the list wraps to the other end
+;; (bemenu's -w/--wrap).
+(define wrap-navigation? (make-parameter #f))
 
 ;; Filter options based on input text
 (define (filter-options options input)
@@ -58,11 +63,12 @@
 
 ;; Handle moving selection down
 (define (handle-next state)
-  (let ((selected-index (completing-read-state-selected-index state))
-        (filtered-options (completing-read-state-filtered-options state)))
-    (let ((new-idx (if (< (+ selected-index 1) (length filtered-options))
-                       (+ selected-index 1)
-                       selected-index)))
+  (let* ((selected-index (completing-read-state-selected-index state))
+         (filtered-options (completing-read-state-filtered-options state))
+         (count (length filtered-options)))
+    (let ((new-idx (cond ((< (+ selected-index 1) count) (+ selected-index 1))
+                         ((and (wrap-navigation?) (> count 0)) 0)
+                         (else selected-index))))
       (list 'state-update
             (make-completing-read-state (completing-read-state-input-text state)
                                         new-idx
@@ -70,14 +76,16 @@
 
 ;; Handle moving selection up
 (define (handle-previous state)
-  (let ((selected-index (completing-read-state-selected-index state)))
-    (let ((new-idx (if (> selected-index 0)
-                       (- selected-index 1)
-                       0)))
+  (let* ((selected-index (completing-read-state-selected-index state))
+         (filtered-options (completing-read-state-filtered-options state))
+         (count (length filtered-options)))
+    (let ((new-idx (cond ((> selected-index 0) (- selected-index 1))
+                         ((and (wrap-navigation?) (> count 0)) (- count 1))
+                         (else 0))))
       (list 'state-update
             (make-completing-read-state (completing-read-state-input-text state)
                                         new-idx
-                                        (completing-read-state-filtered-options state))))))
+                                        filtered-options)))))
 
 ;; Handle backspace - delete last character
 (define* (handle-backspace state options #:key (ctrl-pressed? #f))

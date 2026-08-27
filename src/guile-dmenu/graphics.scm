@@ -12,6 +12,23 @@
             wl-buffer-listener
             background-color
             foreground-color
+            highlight-background-color
+            highlight-foreground-color
+            filter-background-color
+            filter-foreground-color
+            cursor-color
+            title-background-color
+            title-foreground-color
+            alt-background-color
+            alt-foreground-color
+            border-color
+            border-width
+            line-height
+            fixed-height?
+            prefix-text
+            item-height
+            visible-item-count
+            menu-height
             parse-hex-color))
 
 (define WL_SHM_FORMAT_ARGB8888 0)
@@ -19,10 +36,30 @@
 ;; Cairo font settings
 (define font-face "Sans")
 (define font-size 14)
-(define background-color (make-parameter '(0.1 0.1 0.1)))
-(define foreground-color (make-parameter '(0.9 0.9 0.9)))
-(define selected-color '(0.4 0.4 0.8))
-(define input-color '(1.0 0.8 0.2))
+
+;; Colors. Naming follows bemenu's flag names (nb/nf, hb/hf, fb/ff, ...) so
+;; options are trivially portable. Parameters left #f fall back to
+;; foreground-color/background-color at draw time, which keeps default
+;; rendering identical to before these were introduced.
+(define background-color (make-parameter '(0.1 0.1 0.1)))         ; --nb
+(define foreground-color (make-parameter '(0.9 0.9 0.9)))         ; --nf
+(define highlight-background-color (make-parameter '(0.4 0.4 0.8))) ; --hb
+(define highlight-foreground-color (make-parameter '(0.9 0.9 0.9))) ; --hf
+(define filter-background-color (make-parameter #f))              ; --fb
+(define filter-foreground-color (make-parameter '(1.0 0.8 0.2)))  ; --ff
+(define cursor-color (make-parameter #f))                         ; --cb
+(define title-background-color (make-parameter #f))               ; --tb
+(define title-foreground-color (make-parameter #f))               ; --tf
+(define alt-background-color (make-parameter #f))                 ; --ab
+(define alt-foreground-color (make-parameter #f))                 ; --af
+(define border-color (make-parameter '(0.3 0.3 0.3)))             ; --bdr
+(define border-width (make-parameter 0))                          ; --border
+
+;; Layout / behavior
+(define line-height (make-parameter #f))    ; --line-height (#f = auto)
+(define fixed-height? (make-parameter #f))  ; --fixed-height
+(define prefix-text (make-parameter ""))    ; --prefix, shown before the
+                                             ; selected item
 
 ;; Parse hex color string (#RRGGBB) to RGB list (0.0-1.0)
 (define (parse-hex-color str)
@@ -30,6 +67,23 @@
     (list (/ (string->number (substring s 0 2) 16) 255.0)
           (/ (string->number (substring s 2 4) 16) 255.0)
           (/ (string->number (substring s 4 6) 16) 255.0))))
+
+;; Height (in pixels) of a single prompt/item row.
+(define (item-height padding)
+  (or (line-height) (+ font-size (* 2 padding))))
+
+;; Number of item rows actually drawn, given how many options matched and
+;; the configured cap. With fixed-height?, always reserves room for
+;; max-options rows so the window doesn't resize as the filter narrows.
+(define (visible-item-count option-count max-options)
+  (if (fixed-height?)
+      max-options
+      (min option-count max-options)))
+
+;; Total menu height (prompt row + item rows).
+(define (menu-height padding option-count max-options)
+  (* (+ 1 (visible-item-count option-count max-options))
+     (item-height padding)))
 
 ;; Buffer listener for handling release events
 (define wl-buffer-listener
@@ -155,12 +209,107 @@
              buffer)
            (loop rest))))))
 
+;; Render prompt/input/items onto an already-created Cairo context. Pure
+;; drawing logic, kept separate from buffer/wayland plumbing so it can be
+;; exercised directly (e.g. against an in-memory surface) without a
+;; compositor.
+(define (draw-menu-to-cairo-context cr width real-height padding
+                                    prompt input-text selected-index
+                                    filtered-options max-options)
+  (let* ((row-height (item-height padding))
+         (tb (title-background-color))
+         (tf (or (title-foreground-color) (foreground-color)))
+         (fb (filter-background-color))
+         (ff (filter-foreground-color))
+         (cb (or (cursor-color) (foreground-color)))
+         (ab (alt-background-color))
+         (af (or (alt-foreground-color) (foreground-color)))
+         (hb (highlight-background-color))
+         (hf (highlight-foreground-color))
+         (bw (border-width)))
+
+    ;; Set background
+    (apply cairo-set-source-rgb cr (background-color))
+    (cairo-rectangle cr 0 0 width real-height)
+    (cairo-fill cr)
+
+    ;; Set font
+    (cairo-select-font-face cr font-face 'normal 'normal)
+    (cairo-set-font-size cr font-size)
+
+    ;; Calculate the text extents for the prompt
+    (let* ((text-extents (cairo-text-extents cr prompt))
+           (prompt-x-advance (cairo-text-extents:x-advance text-extents))
+           ;; Position after the prompt with a small gap
+           (x-position (+ padding prompt-x-advance 2)))
+
+      ;; Filter row background (input line), if configured
+      (when fb
+        (apply cairo-set-source-rgb cr fb)
+        (cairo-rectangle cr 0 0 width row-height)
+        (cairo-fill cr))
+
+      ;; Title/prompt badge background, if configured
+      (when tb
+        (apply cairo-set-source-rgb cr tb)
+        (cairo-rectangle cr 0 0 x-position row-height)
+        (cairo-fill cr))
+
+      ;; Draw input prompt
+      (apply cairo-set-source-rgb cr tf)
+      (cairo-move-to cr padding (/ (+ font-size row-height) 2))
+      (cairo-show-text cr prompt)
+
+      ;; Draw input text
+      (apply cairo-set-source-rgb cr ff)
+      (cairo-move-to cr x-position (/ (+ font-size row-height) 2))
+      (cairo-show-text cr input-text)
+
+      ;; Draw cursor at end of input
+      (let* ((input-extents (cairo-text-extents cr input-text))
+             (input-width (cairo-text-extents:width input-extents))
+             (cursor-x (+ x-position input-width 2)))
+        (apply cairo-set-source-rgb cr cb)
+        (cairo-rectangle cr cursor-x padding 2 (- row-height (/ (* 3 padding) 2)))
+        (cairo-fill cr))
+
+      ;; Draw menu items
+      (let loop ((items filtered-options)
+                 (index 0))
+        (when (and (not (null? items)) (< index max-options))
+          (let ((y (+ row-height (* index row-height)))
+                (selected? (= index selected-index))
+                (odd-row? (odd? index)))
+            ;; Row background: selection takes priority over alternating rows
+            (cond (selected?
+                   (apply cairo-set-source-rgb cr hb)
+                   (cairo-rectangle cr 0 y width row-height)
+                   (cairo-fill cr))
+                  ((and ab odd-row?)
+                   (apply cairo-set-source-rgb cr ab)
+                   (cairo-rectangle cr 0 y width row-height)
+                   (cairo-fill cr)))
+            ;; Item text, optionally prefixed on the selected item
+            (apply cairo-set-source-rgb cr (cond (selected? hf)
+                                                  ((and ab odd-row?) af)
+                                                  (else (foreground-color))))
+            (cairo-move-to cr x-position (+ y (/ row-height 2) (/ font-size 2)))
+            (cairo-show-text cr (string-append (if selected? (prefix-text) "")
+                                                (car items)))
+            (loop (cdr items) (+ index 1))))))
+
+    ;; Border, drawn last so it isn't painted over
+    (when (> bw 0)
+      (apply cairo-set-source-rgb cr (border-color))
+      (cairo-set-line-width cr bw)
+      (cairo-rectangle cr (/ bw 2) (/ bw 2) (- width bw) (- real-height bw))
+      (cairo-stroke cr))))
+
 ;; Draw the menu with all options
 (define (draw-menu width height padding cache
                    prompt input-text selected-index
                    filtered-options max-options)
-  (let* ((item-height (+ font-size (* 2 padding)))
-         (real-height (* (+ 1 (min (length filtered-options) max-options)) item-height))
+  (let* ((real-height (menu-height padding (length filtered-options) max-options))
          (menu-buffer (next-menu-buffer cache width real-height)))
 
     (and menu-buffer
@@ -177,55 +326,9 @@
                             stride))
                   (cr (cairo-create surface)))
 
-             ;; Set background
-             (apply cairo-set-source-rgb cr (background-color))
-             (cairo-rectangle cr 0 0 width real-height)
-             (cairo-fill cr)
-
-             ;; Set font
-             (cairo-select-font-face cr font-face 'normal 'normal)
-             (cairo-set-font-size cr font-size)
-
-             ;; Calculate the text extents for the prompt
-             (let* ((text-extents (cairo-text-extents cr prompt))
-                    (prompt-width (cairo-text-extents:width text-extents))
-                    (prompt-x-advance (cairo-text-extents:x-advance text-extents))
-                    ;; Position after the prompt with a small gap
-                    (x-position (+ padding prompt-x-advance 2)))
-
-               ;; Draw input prompt
-               (apply cairo-set-source-rgb cr (foreground-color))
-               (cairo-move-to cr padding (/ (+ font-size item-height) 2))
-               (cairo-show-text cr prompt)
-
-               ;; Draw input text
-               (apply cairo-set-source-rgb cr input-color)
-               (cairo-move-to cr x-position (/ (+ font-size item-height) 2))
-               (cairo-show-text cr input-text)
-
-               ;; Draw cursor at end of input
-               (let* ((input-extents (cairo-text-extents cr input-text))
-                      (input-width (cairo-text-extents:width input-extents))
-                      (cursor-x (+ x-position input-width 2)))
-                (apply cairo-set-source-rgb cr (foreground-color))
-                (cairo-rectangle cr cursor-x padding 2 (- item-height (/ (* 3 padding) 2)))
-                (cairo-fill cr))
-
-               ;; Draw menu items
-               (let loop ((items filtered-options)
-                          (index 0))
-                 (when (and (not (null? items)) (< index max-options))
-                   (let ((y (+ item-height (* index item-height))))
-                     ;; Draw selection background if this is the selected item
-                     (when (= index selected-index)
-                       (apply cairo-set-source-rgb cr selected-color)
-                       (cairo-rectangle cr 0 y width item-height)
-                       (cairo-fill cr))
-                     ;; Draw item text
-                     (apply cairo-set-source-rgb cr (foreground-color))
-                     (cairo-move-to cr x-position (+ y (/ item-height 2) (/ font-size 2)))
-                     (cairo-show-text cr (car items))
-                     (loop (cdr items) (+ index 1))))))
+             (draw-menu-to-cairo-context cr width real-height padding
+                                         prompt input-text selected-index
+                                         filtered-options max-options)
 
              ;; Clean up Cairo resources
              (cairo-destroy cr)

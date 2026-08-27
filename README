@@ -19,13 +19,44 @@ in your Sway configuration for the expected result (otherwise Sway will take ove
 * FAQ
 
 ** What is not there yet ?
-- [ ] Configuration is almost non-existent
+- [X] Basic personalization: colors, prefix, border, wrap, item count, fixed
+  height, line height (see "Configuration" below)
 - [ ] I haven't checked Unicode support (maybe a need for guile-pango).
 - [ ] Compatibility with the bemenu API / configuration library
 - [X] Repeat
 - [ ] Check some corner cases / handle all data sent as configuration by the compositor
 - [ ] No pointer/mouse support (no wl_pointer listener, no click-to-select)
 - [ ] No text overflow handling when drawing (long input/item text draws off-window, no ellipsis/clip/scroll)
+- [ ] No window positioning (-b/-c), monitor selection (-m), margin/width-factor,
+  scrollbar, or password mode: these need wlr-layer-shell/output geometry that
+  the current plain xdg-shell client doesn't have access to.
+
+** Configuration
+
+Most of bemenu's personalization flags are supported, under the same names,
+so an existing bemenu color scheme is trivially portable:
+
+```bash
+dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
+      --nb='#1e1e2e' --nf='#cdd6f4' \
+      --hb='#89b4fa' --hf='#1e1e2e' \
+      --fb='#181825' --ff='#f9e2af' \
+      --cb='#f38ba8' \
+      --tb='#a6e3a1' --tf='#1e1e2e' \
+      --ab='#181825' --af='#bac2de' \
+      --bdr='#585b70'
+```
+
+- ~-p, --prompt~: prompt text.
+- ~-l, --list~: max number of items shown at once (default: all matches).
+- ~-w, --wrap~: wrap selection at the top/bottom of the list.
+- ~-P, --prefix~: text shown before the selected item.
+- ~-B, --border~: border width in pixels (0 = no border, the default).
+- ~--fixed-height~: keep the window height constant as the filter narrows.
+- ~--line-height~: override the row height (pixels).
+- Colors, all ~#RRGGBB~: ~--nb/--nf~ (normal), ~--hb/--hf~ (selected item),
+  ~--fb/--ff~ (filter/input line), ~--cb~ (cursor), ~--tb/--tf~ (prompt
+  badge), ~--ab/--af~ (alternating row), ~--bdr~ (border).
 
 ** Differences with dmenu-like programs ?
 - Powered by guile
