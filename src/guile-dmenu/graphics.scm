@@ -143,16 +143,19 @@
                                  (request-redraw (lambda () #t)))
   (%make-menu-buffer-cache shm buffer-count '() '() #f #f #f request-redraw))
 
-(define (destroy-menu-buffer! menu-buffer)
+(define (destroy-menu-buffer! cache menu-buffer)
   (when (and (menu-buffer-released? menu-buffer)
              (not (menu-buffer-destroyed? menu-buffer)))
     (wl-buffer-destroy (menu-buffer-wl-buffer menu-buffer))
     (munmap (menu-buffer-data menu-buffer))
-    (set-menu-buffer-destroyed?! menu-buffer #t)))
+    (set-menu-buffer-destroyed?! menu-buffer #t)
+    (set-menu-buffer-cache-retired-buffers!
+     cache
+     (delq menu-buffer (menu-buffer-cache-retired-buffers cache)))))
 
-(define (retire-menu-buffer! menu-buffer)
+(define (retire-menu-buffer! cache menu-buffer)
   (set-menu-buffer-retired?! menu-buffer #t)
-  (destroy-menu-buffer! menu-buffer))
+  (destroy-menu-buffer! cache menu-buffer))
 
 ;; Create and return a reusable Wayland SHM buffer.
 (define (create-buffer cache width height)
@@ -174,7 +177,7 @@
             (lambda (data buffer)
               (set-menu-buffer-released?! menu-buffer #t)
               (when (menu-buffer-retired? menu-buffer)
-                (destroy-menu-buffer! menu-buffer))
+                (destroy-menu-buffer! cache menu-buffer))
               (when (menu-buffer-cache-pending-redraw? cache)
                 (set-menu-buffer-cache-pending-redraw?! cache #f)
                 ((menu-buffer-cache-request-redraw cache)))
@@ -199,17 +202,20 @@
 (define (ensure-menu-buffers! cache width height)
   (unless (and (equal? (menu-buffer-cache-width cache) width)
                (equal? (menu-buffer-cache-height cache) height))
-    (for-each retire-menu-buffer! (menu-buffer-cache-buffers cache))
-    (set-menu-buffer-cache-retired-buffers!
-     cache
-     (append (menu-buffer-cache-buffers cache)
-             (menu-buffer-cache-retired-buffers cache)))
-    (set-menu-buffer-cache-width! cache width)
-    (set-menu-buffer-cache-height! cache height)
-    (set-menu-buffer-cache-buffers!
-     cache
-     (make-buffer-list cache width height
-                       (menu-buffer-cache-buffer-count cache)))))
+    (let ((old-buffers (menu-buffer-cache-buffers cache)))
+      ;; Register old buffers as retired before destroying released ones, so
+      ;; destroy-menu-buffer! can remove them from the cache immediately.
+      (set-menu-buffer-cache-retired-buffers!
+       cache
+       (append old-buffers (menu-buffer-cache-retired-buffers cache)))
+      (for-each (lambda (buffer) (retire-menu-buffer! cache buffer))
+                old-buffers)
+      (set-menu-buffer-cache-width! cache width)
+      (set-menu-buffer-cache-height! cache height)
+      (set-menu-buffer-cache-buffers!
+       cache
+       (make-buffer-list cache width height
+                         (menu-buffer-cache-buffer-count cache))))))
 
 (define (next-menu-buffer cache width height)
   (ensure-menu-buffers! cache width height)
