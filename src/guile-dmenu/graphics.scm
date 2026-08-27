@@ -6,6 +6,7 @@
   #:use-module (rnrs bytevectors)
   #:use-module (cairo)
   #:use-module (oop goops)
+  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:export (draw-menu
             make-menu-buffer-cache
@@ -29,6 +30,7 @@
             item-height
             visible-item-count
             menu-height
+            menu-visible-window
             parse-hex-color))
 
 (define WL_SHM_FORMAT_ARGB8888 0)
@@ -84,6 +86,20 @@
 (define (menu-height padding option-count max-options)
   (* (+ 1 (visible-item-count option-count max-options))
      (item-height padding)))
+
+;; Return the page of OPTIONS containing SELECTED-INDEX, together with the
+;; selection index relative to that page.  Keeping this calculation in the
+;; renderer means the completion state continues to use an absolute index.
+(define (menu-visible-window options selected-index max-options)
+  (let* ((option-count (length options))
+         (page-start (if (positive? max-options)
+                         (* (quotient selected-index max-options) max-options)
+                         0))
+         ;; Fill the final page when possible instead of leaving unused rows.
+         (start (min page-start (max 0 (- option-count max-options))))
+         (count (min max-options (- option-count start))))
+    (list (take (drop options start) count)
+          (- selected-index start))))
 
 ;; Buffer listener for handling release events
 (define wl-buffer-listener
@@ -273,30 +289,32 @@
         (cairo-rectangle cr cursor-x padding 2 (- row-height (/ (* 3 padding) 2)))
         (cairo-fill cr))
 
-      ;; Draw menu items
-      (let loop ((items filtered-options)
-                 (index 0))
-        (when (and (not (null? items)) (< index max-options))
-          (let ((y (+ row-height (* index row-height)))
-                (selected? (= index selected-index))
-                (odd-row? (odd? index)))
-            ;; Row background: selection takes priority over alternating rows
-            (cond (selected?
-                   (apply cairo-set-source-rgb cr hb)
-                   (cairo-rectangle cr 0 y width row-height)
-                   (cairo-fill cr))
-                  ((and ab odd-row?)
-                   (apply cairo-set-source-rgb cr ab)
-                   (cairo-rectangle cr 0 y width row-height)
-                   (cairo-fill cr)))
-            ;; Item text, optionally prefixed on the selected item
-            (apply cairo-set-source-rgb cr (cond (selected? hf)
-                                                  ((and ab odd-row?) af)
-                                                  (else (foreground-color))))
-            (cairo-move-to cr x-position (+ y (/ row-height 2) (/ font-size 2)))
-            (cairo-show-text cr (string-append (if selected? (prefix-text) "")
-                                                (car items)))
-            (loop (cdr items) (+ index 1))))))
+      ;; Draw the page containing the selected option.
+      (match (menu-visible-window filtered-options selected-index max-options)
+        ((visible-options visible-selected-index)
+         (let loop ((items visible-options)
+                    (index 0))
+           (unless (null? items)
+             (let ((y (+ row-height (* index row-height)))
+                   (selected? (= index visible-selected-index))
+                   (odd-row? (odd? index)))
+               ;; Row background: selection takes priority over alternating rows
+               (cond (selected?
+                      (apply cairo-set-source-rgb cr hb)
+                      (cairo-rectangle cr 0 y width row-height)
+                      (cairo-fill cr))
+                     ((and ab odd-row?)
+                      (apply cairo-set-source-rgb cr ab)
+                      (cairo-rectangle cr 0 y width row-height)
+                      (cairo-fill cr)))
+               ;; Item text, optionally prefixed on the selected item
+               (apply cairo-set-source-rgb cr (cond (selected? hf)
+                                                     ((and ab odd-row?) af)
+                                                     (else (foreground-color))))
+               (cairo-move-to cr x-position (+ y (/ row-height 2) (/ font-size 2)))
+               (cairo-show-text cr (string-append (if selected? (prefix-text) "")
+                                                   (car items)))
+               (loop (cdr items) (+ index 1))))))))
 
     ;; Border, drawn last so it isn't painted over
     (when (> bw 0)
