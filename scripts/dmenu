@@ -1,246 +1,61 @@
 #!/usr/bin/env guile
 !#
-(use-modules (guile-dmenu wayland)
-             (guile-dmenu memory-utils)
+(use-modules (guile-dmenu menu)
              (guile-dmenu graphics)
-             (guile-dmenu keyboard)
              (guile-dmenu filter)
-             (wayland client display)
-             (wayland client protocol wayland)
-             (wayland client protocol xdg-shell)
+             (ice-9 getopt-long)
              (ice-9 match)
              (ice-9 rdelim)
-             (ice-9 getopt-long)
-             (fibers)
-             (fibers channels)
-             (fibers operations)
-             (fibers io-wakeup)
              (srfi srfi-2))
 
-;; Configuration parameters - these don't change during execution
-(define width* (make-parameter 800))
-(define padding* (make-parameter 4))
-;; Max number of items shown at once (-l/--list). #f means show all matches.
-(define max-options* (make-parameter #f))
-
-;; Command-line option spec. Color/layout flags follow bemenu's naming so
-;; existing bemenu configs are trivially portable.
 (define option-spec
-  '((prompt      (single-char #\p) (value #t))
-    (list        (single-char #\l) (value #t))  ; max visible items
-    (wrap        (single-char #\w) (value #f))  ; wrap navigation at ends
-    (prefix      (single-char #\P) (value #t))  ; text before selected item
-    (border      (single-char #\B) (value #t))  ; border width in pixels
-    (fixed-height (value #f))                   ; don't resize on filter
-    (line-height (value #t))                    ; override row height
-    (nb          (value #t))  ; normal background
-    (nf          (value #t))  ; normal foreground
-    (hb          (value #t))  ; highlighted (selected) background
-    (hf          (value #t))  ; highlighted (selected) foreground
-    (fb          (value #t))  ; filter (input line) background
-    (ff          (value #t))  ; filter (input line) foreground
-    (cb          (value #t))  ; cursor color
-    (tb          (value #t))  ; title (prompt badge) background
-    (tf          (value #t))  ; title (prompt badge) foreground
-    (ab          (value #t))  ; alternating row background
-    (af          (value #t))  ; alternating row foreground
-    (bdr         (value #t)))) ; border color
-
-(define (draw prompt connection buffer-cache state max-options)
-  (and-let* ((surface (and=> connection wayland-connection-surface))
-             (input-text (completing-read-state-input-text state))
-             (options (completing-read-state-filtered-options state))
-             (selected-index (completing-read-state-selected-index state))
-             (buffer (draw-menu (width*)
-                                (menu-height (padding*) (length options) max-options)
-                                (padding*)
-                                buffer-cache
-                                prompt
-                                input-text
-                                selected-index
-                                options
-                                max-options)))
-    (wl-surface-attach surface buffer 0 0)
-    (wl-surface-damage surface 0 0 (width*) 1000)
-    (wl-surface-commit surface)
-    #t))
+  '((prompt (single-char #\p) (value #t))
+    (list (single-char #\l) (value #t))
+    (wrap (single-char #\w) (value #f))
+    (prefix (single-char #\P) (value #t))
+    (border (single-char #\B) (value #t))
+    (fixed-height (value #f)) (line-height (value #t))
+    (message (value #t)) (no-input (value #f)) (timeout (value #t))
+    (nb (value #t)) (nf (value #t)) (hb (value #t)) (hf (value #t))
+    (fb (value #t)) (ff (value #t)) (cb (value #t)) (tb (value #t))
+    (tf (value #t)) (ab (value #t)) (af (value #t)) (bdr (value #t))))
 
 (define (read-stdin)
-  (let loop ((line (read-line))
-             (options '()))
-    (if (eof-object? line)
-        (reverse options)
-        (loop (read-line) (cons line options)))))
+  (let loop ((line (read-line)) (items '()))
+    (if (eof-object? line) (reverse items)
+        (loop (read-line) (cons line items)))))
 
-(define (completing-read prompt collection)
-  (let ((max-options (or (max-options*) (length collection))))
+(define colors
+  (list (cons 'nb background-color) (cons 'nf foreground-color)
+        (cons 'hb highlight-background-color) (cons 'hf highlight-foreground-color)
+        (cons 'fb filter-background-color) (cons 'ff filter-foreground-color)
+        (cons 'cb cursor-color) (cons 'tb title-background-color)
+        (cons 'tf title-foreground-color) (cons 'ab alt-background-color)
+        (cons 'af alt-foreground-color) (cons 'bdr border-color)))
 
-    (run-fibers
-     (lambda ()
-       (let ((session (make-keyboard-session))
-             (app-channel (make-channel))
-             (exit-channel (make-channel)))
-         (set-keyboard-session-key-handler!
-          session (make-key-decoder session app-channel exit-channel))
+(define (positive-number value)
+  (and value (let ((n (string->number value))) (and n (> n 0) n))))
 
-         (let* ((initial-program-state (initial-state collection))
-               (conn (connect-wayland (make-seat-listener session)))
-               (display (wayland-connection-display conn))
-               (wayland-port (fdes->inport (wl-display-get-fd display)))
-               (buffer-cache
-                (make-menu-buffer-cache
-                 (wayland-connection-shm conn)
-                 #:request-redraw
-                 (lambda ()
-                   (spawn-fiber
-                    (lambda ()
-                      (put-message app-channel 'redraw)))))))
-
-           ;; Main application loop - processes all events and maintains state
-           (spawn-fiber
-            (lambda ()
-              (let loop ((current-state initial-program-state))
-                ;; Block on either an app-level message or Wayland socket activity
-                (loop
-                 (match (perform-operation
-                         (choice-operation
-                          (get-operation app-channel)
-                          (wrap-operation (wait-until-port-readable-operation wayland-port)
-                                          (lambda () 'wayland-readable))))
-                   ;; ---- State Operations ----
-                   ('select
-                    (match (handle-select current-state)
-                      (('exit code)
-                       (put-message exit-channel code)
-                       current-state)
-                      (('no-change _)
-                       current-state)
-                      (_ current-state)))
-
-                   ('next
-                    (match (handle-next current-state)
-                      (('state-update new-state)
-                       (draw prompt conn buffer-cache new-state max-options)
-                       (wl-display-flush display)
-                       new-state)
-                      (_ current-state)))
-
-                   ('previous
-                    (match (handle-previous current-state)
-                      (('state-update new-state)
-                       (draw prompt conn buffer-cache new-state max-options)
-                       (wl-display-flush display)
-                       new-state)
-                      (_ current-state)))
-
-                   ((and (or 'ctrl+backspace 'backspace) key)
-                    (match (handle-backspace current-state collection
-                                             #:ctrl-pressed?
-                                             (eq? key 'ctrl+backspace))
-                      (('state-update new-state)
-                       (pk 'input (completing-read-state-input-text new-state))
-                       (draw prompt conn buffer-cache new-state max-options)
-                       (wl-display-flush display)
-                       new-state)
-                      (('no-change _)
-                       current-state)
-                      (_ current-state)))
-
-                   (('input-char char)
-                    (match (handle-input-char char current-state collection)
-                      (('state-update new-state)
-                       (pk 'char:input (completing-read-state-input-text new-state))
-                       (draw prompt conn buffer-cache new-state max-options)
-                       (wl-display-flush display)
-                       new-state)
-                      (_ current-state)))
-
-                   ;; ---- Wayland Operations ----
-                   ('redraw
-                    (draw prompt conn buffer-cache current-state max-options)
-                    (wl-display-flush display)
-                    current-state)
-
-                   ('surface-configure
-                    (draw prompt conn buffer-cache current-state max-options)
-                    (wl-display-flush display)
-                    current-state)
-
-                   ('wayland-readable
-                    (wl-display-dispatch display)
-                    current-state)
-
-                   (_ current-state))))
-              #t))
-
-           ;; Initial draw request
-           (put-message app-channel 'redraw)
-
-           ;; Create and configure window
-           (create-window
-            conn
-            "dmenu"
-            "wl-dmenu"
-            (width*)
-
-            ;; XDG surface configure callback
-            (lambda (data xdg-surface serial)
-              (xdg-surface-ack-configure xdg-surface serial)
-              ;; Request a redraw after surface configuration
-              (spawn-fiber
-               (lambda ()
-                 (put-message app-channel 'surface-configure)))
-              #t)
-
-            ;; XDG toplevel configure callback
-            (lambda (data xdg width height states)
-              (unless (zero? width)
-                (width* width))
-              #t)
-
-            ;; XDG toplevel close callback
-            (lambda (data xdg-toplevel)
-              (exit 0)))
-
-           ;; Exit handling loop
-           (let loop ()
-             (let ((exit-code (get-message exit-channel)))
-               (format (current-error-port) "Exiting with code: ~a~%" exit-code)
-               (primitive-exit exit-code))))))
-
-     #:drain? #t)))
-
-(define color-option-spec
-  ;; (option-name . parameter) for all bemenu-style color flags.
-  (list (cons 'nb background-color)
-        (cons 'nf foreground-color)
-        (cons 'hb highlight-background-color)
-        (cons 'hf highlight-foreground-color)
-        (cons 'fb filter-background-color)
-        (cons 'ff filter-foreground-color)
-        (cons 'cb cursor-color)
-        (cons 'tb title-background-color)
-        (cons 'tf title-foreground-color)
-        (cons 'ab alt-background-color)
-        (cons 'af alt-foreground-color)
-        (cons 'bdr border-color)))
-
-(let* ((options (getopt-long (command-line) option-spec))
-       (prompt (or (option-ref options 'prompt #f) "dmenu: ")))
-  ;; Colors
-  (for-each (match-lambda
-              ((name . param)
-               (and=> (option-ref options name #f)
-                      (lambda (hex) (param (parse-hex-color hex))))))
-            color-option-spec)
-  ;; Layout / behavior
-  (and=> (option-ref options 'list #f)
-         (lambda (n) (max-options* (string->number n))))
-  (and=> (option-ref options 'border #f)
+(let* ((opts (getopt-long (command-line) option-spec))
+       (prompt (or (option-ref opts 'prompt #f) "dmenu: ")))
+  (for-each (match-lambda ((name . parameter)
+                           (and=> (option-ref opts name #f)
+                                  (lambda (hex) (parameter (parse-hex-color hex))))))
+            colors)
+  (and=> (option-ref opts 'list #f)
+         (lambda (n) (menu-max-options (string->number n))))
+  (and=> (option-ref opts 'border #f)
          (lambda (n) (border-width (string->number n))))
-  (and=> (option-ref options 'line-height #f)
+  (and=> (option-ref opts 'line-height #f)
          (lambda (n) (line-height (string->number n))))
-  (and=> (option-ref options 'prefix #f) prefix-text)
-  (when (option-ref options 'wrap #f) (wrap-navigation? #t))
-  (when (option-ref options 'fixed-height #f) (fixed-height? #t))
-  (completing-read prompt (read-stdin)))
+  (and=> (option-ref opts 'prefix #f) prefix-text)
+  (when (option-ref opts 'wrap #f) (wrap-navigation? #t))
+  (when (option-ref opts 'fixed-height #f) (fixed-height? #t))
+  (let ((answer (completing-read prompt (read-stdin)
+                                 #:message (option-ref opts 'message #f)
+                                 #:input-enabled? (not (option-ref opts 'no-input #f))
+                                 #:timeout (positive-number
+                                            (option-ref opts 'timeout #f)))))
+    (if answer
+        (begin (display answer) (newline) (primitive-exit 0))
+        (primitive-exit 1))))

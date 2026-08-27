@@ -1,0 +1,69 @@
+#!/usr/bin/env guile
+!#
+(use-modules (guile-dmenu approval) (json)
+             (ice-9 getopt-long) (ice-9 exceptions) (ice-9 format))
+
+(define default-timeout 120)
+(define (valid-timeout value)
+  (and value (let ((n (string->number value))) (and n (> n 0) n))))
+(define (now) (/ (get-internal-real-time) internal-time-units-per-second))
+(define (diagnose fmt . args) (apply format (current-error-port) fmt args))
+(define (runtime-lock display)
+  (let ((runtime (getenv "XDG_RUNTIME_DIR")))
+    (and runtime
+         (string-append runtime "/codex-dmenu-approval-"
+                        (string-map (lambda (c) (if (or (char-alphabetic? c)
+                                                        (char-numeric? c)) c #\_))
+                                    (or display "default"))
+                        ".lock"))))
+(define (acquire-until path deadline)
+  (let ((port (open-file path "a")))
+    (let loop ()
+      (cond ((catch 'system-error
+               (lambda () (flock port (logior LOCK_EX LOCK_NB)) #t)
+               (lambda args #f))
+             port)
+            ((>= (now) deadline) (close-port port) #f)
+            (else (usleep 50000) (loop))))))
+(define (emit value) (scm->json value) (newline))
+(define (graphical-choice message remaining)
+  ((module-ref (resolve-interface '(guile-dmenu menu)) 'completing-read)
+   "Codex permission request"
+   '("Review in terminal" "Allow once" "Deny")
+   #:message message #:input-enabled? #f #:timeout remaining
+   #:max-message-lines 12))
+
+(let* ((opts (getopt-long (command-line) '((timeout (value #t)))))
+       (seconds (or (valid-timeout (option-ref opts 'timeout #f))
+                    (valid-timeout (getenv "CODEX_DMENU_TIMEOUT"))
+                    default-timeout))
+       (deadline (+ (now) seconds)))
+  ;; A process-level monotonic backstop also interrupts a Wayland FFI call if
+  ;; the compositor stops responding and the cooperative fiber timer cannot run.
+  (sigaction SIGALRM (lambda args (primitive-exit 0)))
+  (alarm (inexact->exact (ceiling seconds)))
+  (with-exception-handler
+      (lambda (exception)
+        (diagnose "codex-dmenu-approval: ~a~%" exception)
+        (primitive-exit 0))
+    (lambda ()
+      (let* ((request (parse-request (current-input-port)))
+             (path (runtime-lock (getenv "WAYLAND_DISPLAY")))
+             (lock (and path (acquire-until path deadline))))
+        (if (not lock)
+            (diagnose "codex-dmenu-approval: lock unavailable or deadline expired~%")
+            (dynamic-wind
+              (lambda () #t)
+              (lambda ()
+                (let ((remaining (- deadline (now))))
+                  (when (> remaining 0)
+                    (let* (;; Tests can inject a stdin-safe mock without moving
+                           ;; request contents into its argv or environment.
+                           (mock (getenv "CODEX_DMENU_MOCK_RESPONSE"))
+                           (answer
+                            (or mock
+                                (graphical-choice (request-message request)
+                                                  remaining))))
+                      (cond ((equal? answer "Allow once") (emit (allow-result)))
+                            ((equal? answer "Deny") (emit (deny-result))))))))
+              (lambda () (flock lock LOCK_UN) (close-port lock))))))))

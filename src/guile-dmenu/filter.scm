@@ -56,9 +56,7 @@
         (selected-index (completing-read-state-selected-index state)))
     (if (and (not (null? filtered-options))
              (< selected-index (length filtered-options)))
-        (let ((selected (list-ref filtered-options selected-index)))
-          (format #t "~a~%" selected)
-          (list 'exit 0))
+        (list 'selected (list-ref filtered-options selected-index))
         (list 'no-change state))))
 
 ;; Handle moving selection down

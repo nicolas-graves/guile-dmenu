@@ -96,20 +96,25 @@
             (add-after 'build 'install-script
               (lambda* (#:key inputs #:allow-other-keys)
                 (let* ((bin (string-append #$output "/bin/"))
-                       (dmenu (string-append bin "dmenu")))
+                       (dmenu (string-append bin "dmenu"))
+                       (approval (string-append bin "codex-dmenu-approval")))
                   (install-file "scripts/dmenu" bin)
-                  (wrap-program dmenu
-                    #:sh (search-input-file inputs "bin/bash")
-                    `("GUILE_AUTO_COMPILE" ":" = ("0"))
-                    `("GUILE_LOAD_PATH" ":" prefix
-                      ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
-                    `("GUILE_LOAD_COMPILED_PATH" ":" prefix
-                      ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH")
-                                     #\:)))))))))
+                  (install-file "scripts/codex-dmenu-approval" bin)
+                  (for-each
+                   (lambda (program)
+                     (wrap-program program
+                       #:sh (search-input-file inputs "bin/bash")
+                       `("GUILE_AUTO_COMPILE" ":" = ("0"))
+                       `("GUILE_LOAD_PATH" ":" prefix
+                         ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
+                       `("GUILE_LOAD_COMPILED_PATH" ":" prefix
+                         ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:))))
+                   (list dmenu approval))))))))
       (native-inputs (list guile-3.0))
       (inputs (list bash-minimal guile-3.0))
       (propagated-inputs (list guile-cairo
                                guile-fibers
+                               guile-json-4
                                guile-wayland
                                guile-xkbcommon))
       (home-page "https://git.sr.ht/~ngraves/guile-dmenu")

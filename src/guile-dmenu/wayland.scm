@@ -2,6 +2,8 @@
   #:use-module (wayland client display)
   #:use-module (wayland client protocol wayland)
   #:use-module (wayland client protocol xdg-shell)
+  #:use-module (wayland util)
+  #:use-module ((system foreign) #:select ((int . ffi:int) void))
   #:use-module (oop goops)
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
@@ -19,7 +21,24 @@
             wayland-connection-xdg-toplevel
             connect-wayland
             create-window
+            wl-display-cancel-read
+            wl-display-dispatch-pending
+            wl-display-prepare-read
             run-event-loop))
+
+;; guile-wayland exposes read-events but not the other nonblocking display
+;; primitives required to integrate libwayland with Fibers' poll loop.
+(define-wl-client-procedure (wl-display-prepare-read display)
+  (ffi:int "wl_display_prepare_read" '(*))
+  (% (unwrap-wl-display display)))
+
+(define-wl-client-procedure (wl-display-cancel-read display)
+  (void "wl_display_cancel_read" '(*))
+  (% (unwrap-wl-display display)))
+
+(define-wl-client-procedure (wl-display-dispatch-pending display)
+  (ffi:int "wl_display_dispatch_pending" '(*))
+  (% (unwrap-wl-display display)))
 
 ;; Define a record type to hold all Wayland-related objects
 (define-record-type <wayland-connection>
@@ -50,8 +69,7 @@
         (w-display (wl-display-connect)))
 
     (unless w-display
-      (format (current-error-port) "Unable to connect to wayland compositor~%")
-      (exit -1))
+      (error "Unable to connect to Wayland compositor"))
 
     (set-wayland-connection-display! conn w-display)
     (set-wayland-connection-seat-listener! conn seat-listener)
@@ -109,8 +127,7 @@
       (unless (and (wayland-connection-compositor conn)
                    (wayland-connection-shm conn)
                    (wayland-connection-xdg-wm-base conn))
-        (format (current-error-port) "Missing required Wayland protocols~%")
-        (exit 1))
+        (error "Missing required Wayland protocols"))
 
       conn)))
 

@@ -54,6 +54,9 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
 - ~-B, --border~: border width in pixels (0 = no border, the default).
 - ~--fixed-height~: keep the window height constant as the filter narrows.
 - ~--line-height~: override the row height (pixels).
+- ~--message~: show a read-only, wrapped detail panel above the choices.
+- ~--no-input~: disable filtering and text entry (useful for confirmations).
+- ~--timeout~: close without a selection after the given number of seconds.
 - Colors, all ~#RRGGBB~: ~--nb/--nf~ (normal), ~--hb/--hf~ (selected item),
   ~--fb/--ff~ (filter/input line), ~--cb~ (cursor), ~--tb/--tf~ (prompt
   badge), ~--ab/--af~ (alternating row), ~--bdr~ (border).
@@ -63,7 +66,39 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
 - Not that minimal (but all Wayland clients are too)
 
 ** Difference with completing-read
-- [ ] Not yet there
+- The ~(guile-dmenu menu)~ module exports ~completing-read~.  In addition to
+  its prompt and collection arguments it accepts ~#:message~,
+  ~#:input-enabled?~, ~#:timeout~, and ~#:max-message-lines~.  It returns the
+  selected string or ~#f~ when cancelled, closed, or timed out.
+
+* Codex permission approvals
+
+The installed ~codex-dmenu-approval~ command implements Codex's supported
+~PermissionRequest~ hook contract.  It serializes prompts per user and Wayland
+display, gives queueing plus interaction one 120-second deadline, and emits no
+decision when the graphical prompt cannot safely answer.  In that case Codex
+uses its normal terminal prompt.
+
+Add this to =~/.codex/config.toml= yourself (the package never edits it):
+
+```toml
+[[hooks.PermissionRequest]]
+matcher = "*"
+
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "codex-dmenu-approval"
+timeout = 135
+statusMessage = "Waiting for graphical approval"
+```
+
+Keep an interactive policy such as ~approval_policy = "on-request"~, make sure
+the installed executable is on Codex's ~PATH~, then trust the hook through
+~/hooks~.  ~Allow once~ sends an allow decision, ~Deny~ sends an explicit deny,
+and ~Review in terminal~, Escape, window close, timeout, or a graphical error
+leave stdout empty.  Override the deadline with ~--timeout SECONDS~ or
+~CODEX_DMENU_TIMEOUT~.  Invalid and non-positive values use the 120-second
+default.  See the [[https://learn.chatgpt.com/docs/hooks][PermissionRequest hook contract]].
 
 ** Why not use the bemenu library with guile bindings ?
 

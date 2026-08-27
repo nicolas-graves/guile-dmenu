@@ -9,6 +9,8 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:export (draw-menu
+            draw-menu-to-cairo-context
+            wrap-message-lines
             make-menu-buffer-cache
             wl-buffer-listener
             background-color
@@ -83,9 +85,22 @@
       (min option-count max-options)))
 
 ;; Total menu height (prompt row + item rows).
-(define (menu-height padding option-count max-options)
-  (* (+ 1 (visible-item-count option-count max-options))
+(define* (menu-height padding option-count max-options #:optional (message-lines 0))
+  (* (+ 1 message-lines (visible-item-count option-count max-options))
      (item-height padding)))
+
+;; Wrap text by character count.  Unlike word-only wrappers this also breaks
+;; commands, paths, and serialized inputs that contain no whitespace.
+(define* (wrap-message-lines message columns #:optional (maximum 12))
+  (define (chunks s)
+    (if (<= (string-length s) columns)
+        (list s)
+        (cons (substring s 0 columns) (chunks (substring s columns)))))
+  (let* ((raw (append-map chunks (string-split (or message "") #\newline)))
+         (truncated? (> (length raw) maximum)))
+    (if truncated?
+        (append (take raw (max 0 (- maximum 1))) (list "... [truncated]"))
+        raw)))
 
 ;; Return the page of OPTIONS containing SELECTED-INDEX, together with the
 ;; selection index relative to that page.  Keeping this calculation in the
@@ -235,9 +250,10 @@
 ;; drawing logic, kept separate from buffer/wayland plumbing so it can be
 ;; exercised directly (e.g. against an in-memory surface) without a
 ;; compositor.
-(define (draw-menu-to-cairo-context cr width real-height padding
-                                    prompt input-text selected-index
-                                    filtered-options max-options)
+(define* (draw-menu-to-cairo-context cr width real-height padding
+                                     prompt input-text selected-index
+                                     filtered-options max-options
+                                     #:key (message-lines '()) (input-enabled? #t))
   (let* ((row-height (item-height padding))
          (tb (title-background-color))
          (tf (or (title-foreground-color) (foreground-color)))
@@ -287,13 +303,24 @@
       (cairo-move-to cr x-position (/ (+ font-size row-height) 2))
       (cairo-show-text cr input-text)
 
-      ;; Draw cursor at end of input
-      (let* ((input-extents (cairo-text-extents cr input-text))
+      ;; Draw cursor at end of input when editing is enabled.
+      (when input-enabled?
+       (let* ((input-extents (cairo-text-extents cr input-text))
              (input-width (cairo-text-extents:width input-extents))
              (cursor-x (+ x-position input-width 2)))
         (apply cairo-set-source-rgb cr cb)
         (cairo-rectangle cr cursor-x padding 2 (- row-height (/ (* 3 padding) 2)))
-        (cairo-fill cr))
+        (cairo-fill cr)))
+
+      ;; Read-only detail panel.
+      (let loop ((lines message-lines) (index 0))
+        (unless (null? lines)
+          (apply cairo-set-source-rgb cr (foreground-color))
+          (cairo-move-to cr padding
+                         (+ (* (+ index 1) row-height)
+                            (/ row-height 2) (/ font-size 2)))
+          (cairo-show-text cr (car lines))
+          (loop (cdr lines) (+ index 1))))
 
       ;; Draw the page containing the selected option.
       (match (menu-visible-window filtered-options selected-index max-options)
@@ -301,7 +328,7 @@
          (let loop ((items visible-options)
                     (index 0))
            (unless (null? items)
-             (let ((y (+ row-height (* index row-height)))
+             (let ((y (* (+ 1 (length message-lines) index) row-height))
                    (selected? (= index visible-selected-index))
                    (odd-row? (odd? index)))
                ;; Row background: selection takes priority over alternating rows
@@ -330,10 +357,12 @@
       (cairo-stroke cr))))
 
 ;; Draw the menu with all options
-(define (draw-menu width height padding cache
+(define* (draw-menu width height padding cache
                    prompt input-text selected-index
-                   filtered-options max-options)
-  (let* ((real-height (menu-height padding (length filtered-options) max-options))
+                   filtered-options max-options
+                   #:key (message-lines '()) (input-enabled? #t))
+  (let* ((real-height (menu-height padding (length filtered-options) max-options
+                                  (length message-lines)))
          (menu-buffer (next-menu-buffer cache width real-height)))
 
     (and menu-buffer
@@ -352,7 +381,9 @@
 
              (draw-menu-to-cairo-context cr width real-height padding
                                          prompt input-text selected-index
-                                         filtered-options max-options)
+                                         filtered-options max-options
+                                         #:message-lines message-lines
+                                         #:input-enabled? input-enabled?)
 
              ;; Clean up Cairo resources
              (cairo-destroy cr)
