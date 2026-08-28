@@ -159,8 +159,10 @@ Acceptance checks:
   Back with retained answers, free-form Other input, timeout, window closure,
   and compositor failure instead of relying only on an injected reader.
 - The Codex approval integration is regression-tested for allow, deny, review
-  in terminal, timeout, lock contention, malformed hook input, and graphical
-  failure. All fallback cases must leave stdout empty.
+  in terminal, deadline exhaustion under lock contention, malformed hook
+  input, and graphical failure. All fallback cases leave stdout empty, and
+  malformed sensitive input is absent from diagnostics. A real graphical
+  timeout remains part of the headless Wayland gate.
 - A Guix package build verifies that the question modules, generic command, and
   migrated approval command are installed and runnable from the packaged
   environment.

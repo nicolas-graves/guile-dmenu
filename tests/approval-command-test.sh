@@ -33,4 +33,28 @@ test ! -s "$test_dir/review"
 run_approval 'unavailable' "$test_dir/failure" "$test_dir/failure.err"
 test ! -s "$test_dir/failure"
 
+secret='must-not-leak-from-malformed-input'
+printf '{"tool_input":"%s"\n' "$secret" |
+  GUILE_AUTO_COMPILE=0 \
+  GUILE_LOAD_PATH="$project_dir/src${GUILE_LOAD_PATH:+:$GUILE_LOAD_PATH}" \
+  XDG_RUNTIME_DIR="$test_dir" \
+  "$project_dir/scripts/codex-dmenu-approval" \
+  >"$test_dir/malformed" 2>"$test_dir/malformed.err"
+test ! -s "$test_dir/malformed"
+test -s "$test_dir/malformed.err"
+! grep -q "$secret" "$test_dir/malformed.err"
+
+# Hold the exact per-display lock used by the command.  Exhausting the shared
+# deadline while queued must fall back silently and must never open a prompt.
+lock="$test_dir/codex-dmenu-approval-default.lock"
+ready="$test_dir/lock-ready"
+flock "$lock" sh -c 'touch "$1"; sleep 1' sh "$ready" &
+holder=$!
+while test ! -e "$ready"; do sleep 0.01; done
+CODEX_DMENU_TIMEOUT=0.1 run_approval 'Allow once' \
+  "$test_dir/contended" "$test_dir/contended.err"
+wait "$holder"
+test ! -s "$test_dir/contended"
+grep -q 'lock unavailable or deadline expired' "$test_dir/contended.err"
+
 printf '%s\n' 'approval command regression: PASS'
