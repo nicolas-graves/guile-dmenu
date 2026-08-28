@@ -1,0 +1,19 @@
+#!/usr/bin/env guile
+!#
+(use-modules (guile-dmenu question-command)
+             (ice-9 exceptions)
+             (ice-9 format))
+
+(when (> (length (command-line)) 1)
+  (format (current-error-port)
+          "guile-dmenu-questions: requests are accepted on stdin only~%")
+  (primitive-exit 2))
+
+(with-exception-handler
+    (lambda (exception)
+      ;; Do not echo malformed or sensitive prompt contents in diagnostics.
+      (format (current-error-port)
+              "guile-dmenu-questions: invalid request or runtime failure~%")
+      (primitive-exit 2))
+  (lambda ()
+    (run-question-command (current-input-port) (current-output-port))))

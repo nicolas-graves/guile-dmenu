@@ -97,9 +97,11 @@
               (lambda* (#:key inputs #:allow-other-keys)
                 (let* ((bin (string-append #$output "/bin/"))
                        (dmenu (string-append bin "dmenu"))
-                       (approval (string-append bin "codex-dmenu-approval")))
+                       (approval (string-append bin "codex-dmenu-approval"))
+                       (questions (string-append bin "guile-dmenu-questions")))
                   (install-file "scripts/dmenu" bin)
                   (install-file "scripts/codex-dmenu-approval" bin)
+                  (install-file "scripts/guile-dmenu-questions" bin)
                   (for-each
                    (lambda (program)
                      (wrap-program program
@@ -109,7 +111,7 @@
                          ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
                        `("GUILE_LOAD_COMPILED_PATH" ":" prefix
                          ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:))))
-                   (list dmenu approval))))))))
+                   (list dmenu approval questions))))))))
       (native-inputs (list guile-3.0))
       (inputs (list bash-minimal guile-3.0))
       (propagated-inputs (list guile-cairo

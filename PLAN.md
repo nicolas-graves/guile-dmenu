@@ -98,10 +98,9 @@ public API changes.
   are retained, and a missing recommendation leaves the outcome timed out.
   The ~confirm/result~ convenience API builds on those same structured result
   and failure semantics, while ~confirm~ provides a compact boolean wrapper.
-- Add a generic command boundary for non-Scheme callers. It must accept
-  structured JSON questions on stdin, emit only structured answers/outcomes on
-  stdout, reserve stderr for diagnostics, and never pass prompt contents
-  through argv or environment variables.
+  The ~guile-dmenu-questions~ command provides the generic non-Scheme boundary:
+  one structured JSON request on stdin, only the answer/outcome on stdout, and
+  diagnostics on stderr, with no prompt contents in argv or environment.
 - Migrate `codex-dmenu-approval` to the structured prompt API so the real
   Codex-facing consumer exercises the generic implementation without changing
   its fail-safe empty-output fallback contract.
@@ -144,7 +143,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 264 passing tests; no
+- Unit-suite status is documented from the current 273 passing tests; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline

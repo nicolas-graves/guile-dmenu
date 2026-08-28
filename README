@@ -31,6 +31,23 @@ For the common two-choice case, ~confirm/result~ uses the same outcomes and
 returns an explicit ~yes~ or ~no~ answer; ~confirm~ is the compact boolean
 wrapper for callers that do not need to distinguish No from termination.
 
+Non-Scheme callers can use ~guile-dmenu-questions~.  It accepts one JSON object
+on stdin and writes one outcome object on stdout; prompt contents are never
+accepted through argv or environment variables.  Diagnostics go only to
+stderr.  A minimal request is:
+
+#+begin_src json
+{"questions":[{"id":"publish","prompt":"Publish?","options":[
+  {"id":"yes","label":"Yes"},{"id":"no","label":"No"}]}]}
+#+end_src
+
+Questions may additionally contain ~allowOther~; options may contain
+~description~ and ~recommended~.  The top-level optional fields are ~timeout~
+and ~autoResolve~.  A successful response has the form
+~{"status":"answered","answers":[{"id":"publish","answer":"yes"}]}~.
+Other termination statuses have ~answers: false~; free-form answers are encoded
+as ~{"other":"text"}~.
+
 ** Feature comparison and direction
 
 The table compares the three active product inspirations with the current
@@ -64,6 +81,7 @@ boundary rather than an implementation gap.
 | Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | Available through ~#:message~ |
 | Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline and expose distinct termination outcomes; compatibility calls return ~#f~ |
 | Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | supported | ~confirm/result~ preserves structured outcomes; ~confirm~ is the boolean convenience wrapper |
+| Structured JSON command boundary | no | no | hook/tool transport | supported | One request on stdin and one outcome on stdout; diagnostics use stderr |
 | Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
 | Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids are independent of labels; recommended or retained answers set the initial highlight |
 | Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | supported | Opt-in per question; returned as a tagged answer distinct from option ids |
