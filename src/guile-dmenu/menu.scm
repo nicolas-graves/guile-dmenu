@@ -13,6 +13,7 @@
   #:use-module (fibers operations)
   #:use-module (fibers io-wakeup)
   #:use-module (fibers timers)
+  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:export (completing-read
             completing-read/result
@@ -49,12 +50,24 @@
 (define (completing-read-result-value-procedure result)
   (completing-read-result-value result))
 
-(define (draw-state prompt message-lines input-enabled? conn cache state maximum)
+(define (draw-state prompt message-lines option-details details-visible?
+                    input-enabled? conn cache state maximum)
   (let ((surface (wayland-connection-surface conn))
         (state-message-lines
-         (if (completing-read-state-confirmation-input state)
-             (append message-lines '("Confirm submission with RET"))
-             message-lines)))
+         (append
+          message-lines
+          (if (and details-visible? (pair? option-details))
+              (let* ((index (completing-read-state-selected-index state))
+                     (detail (and (< index (length option-details))
+                                  (list-ref option-details index))))
+                (if detail
+                    (wrap-message-lines
+                     detail (max 20 (quotient (menu-width) 8)) 6)
+                    '()))
+              '())
+          (if (completing-read-state-confirmation-input state)
+              '("Confirm submission with RET")
+              '()))))
     (when surface
       (let ((buffer (draw-menu (menu-width) 0 (menu-padding) cache prompt
                                (completing-read-state-input-text state)
@@ -74,6 +87,7 @@
                           (initial-input "") (history #f) (default #f)
                           (inherit-input-method #f)
                           #:key (message #f) (input-enabled? #t)
+                          (option-details #f)
                           (timeout #f) (max-message-lines 12)
                           (selection-mode 'text)
                           (initial-selected-index 0)
@@ -108,6 +122,14 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                                                 (max 20 (quotient (menu-width) 8))
                                                 max-message-lines)
                             '())))
+    (unless (or (not option-details)
+                (and (list? option-details)
+                     (= (length option-details) (length options))
+                     (every (lambda (detail)
+                              (or (not detail) (string? detail)))
+                            option-details)))
+      (error "option details must match the displayed collection"
+             option-details))
     (run-fibers
      (lambda ()
        (let ((session (make-keyboard-session))
@@ -122,13 +144,15 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                                       inherit-input-method history
                                       initial-selected-index))
                 (read-prepared? #f)
+                (details-visible? #f)
                 (cache (make-menu-buffer-cache
                         (wayland-connection-shm conn)
                         #:request-redraw
                         (lambda () (spawn-fiber (lambda ()
                                                   (put-message events 'redraw)))))))
            (define (redraw s)
-             (draw-state prompt message-lines input-enabled? conn cache s maximum)
+             (draw-state prompt message-lines option-details details-visible?
+                         input-enabled? conn cache s maximum)
              (wl-display-flush display))
            (create-window
             conn "dmenu" "wl-dmenu" (menu-width)
@@ -172,6 +196,21 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                                       (negative? (wl-display-dispatch-pending display)))
                                   (put-message result '(graphical-failure))
                                   (loop s)))
+                    ('complete
+                     (if (and (not input-enabled?) option-details)
+                         (begin
+                           (set! details-visible? (not details-visible?))
+                           (redraw s)
+                           (loop s))
+                         (match (dispatch-completing-read-event
+                                 s event options collection
+                                 #:predicate predicate
+                                 #:selection-mode selection-mode
+                                 #:require-match require-match
+                                 #:style completion-style
+                                 #:input-enabled? input-enabled?)
+                           (('state-update n) (redraw n) (loop n))
+                           (_ (loop s)))))
                     (_
                      (match (dispatch-completing-read-event
                              s event options collection

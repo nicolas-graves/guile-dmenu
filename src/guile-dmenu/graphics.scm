@@ -342,7 +342,10 @@
                (apply cairo-set-source-rgb cr (cond (selected? hf)
                                                      ((and ab odd-row?) af)
                                                      (else (foreground-color))))
-               (cairo-move-to cr x-position (+ y (/ row-height 2) (/ font-size 2)))
+               ;; Options are rows of their own, not continuations of the
+               ;; prompt/input row.  Starting them at x-position made a long
+               ;; prompt consume (and sometimes visually clip) their text.
+               (cairo-move-to cr padding (+ y (/ row-height 2) (/ font-size 2)))
                (cairo-show-text cr (string-append (if selected? (prefix-text) "")
                                                    (car items)))
                (loop (cdr items) (+ index 1))))))))

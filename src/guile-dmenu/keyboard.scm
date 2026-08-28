@@ -199,12 +199,11 @@
        ((= keysym XKB_KEY_Return)
         (put-message app-channel 'select))
 
-       ;; Shift+TAB moves backward in read-only menus.  Editable input keeps
-       ;; TAB for completion and deliberately leaves reverse completion inert.
+       ;; Shift+TAB is distinct so callers can assign it their own workflow.
        ((= keysym XKB_KEY_ISO_Left_Tab)
         (put-message app-channel 'complete-previous))
 
-       ;; TAB - Complete editable input or move forward in a read-only menu.
+       ;; TAB completes editable input; read-only menus may use it for details.
        ((= keysym XKB_KEY_Tab)
         (put-message app-channel 'complete))
 

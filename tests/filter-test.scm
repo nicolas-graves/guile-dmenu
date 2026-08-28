@@ -175,9 +175,9 @@
        (back-tabbed (cadr (dispatch-completing-read-event
                            tabbed 'complete-previous options options
                            #:input-enabled? #f))))
-  (test-equal "TAB advances selection in a read-only menu"
-    1 (completing-read-state-selected-index tabbed))
-  (test-equal "Shift+TAB moves selection backward in a read-only menu"
+  (test-equal "TAB leaves selection unchanged in a read-only menu"
+    0 (completing-read-state-selected-index tabbed))
+  (test-equal "Shift+TAB leaves selection unchanged in a read-only menu"
     0 (completing-read-state-selected-index back-tabbed))
   (test-equal "Shift+TAB remains inert for editable completion"
     'no-change

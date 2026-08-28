@@ -55,15 +55,12 @@
 (define (option-display option)
   (string-append
    (question-option-label option)
-   (if (question-option-recommended? option) " (Recommended)" "")
-   (if (question-option-description option)
-       (string-append " — " (question-option-description option))
-       "")))
+   (if (question-option-recommended? option) " (Recommended)" "")))
 
 (define (question-message question page total context)
   (string-join
    (append
-    (list (format #f "Question ~a of ~a  ·  ↑↓ or Tab/Shift+Tab choose  ·  Enter confirm  ·  Esc cancel"
+    (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Tab details  ·  Enter confirm  ·  Esc cancel"
                   (+ page 1) total))
     (if context (list context) '()))
    "\n"))
@@ -137,6 +134,10 @@ headless verification."
            (choices (append (map option-display options)
                             (if allow-other? (list %other-label) '())
                             (if (positive? page) (list %back-label) '())))
+           (option-details
+            (append (map question-option-description options)
+                    (if allow-other? (list #f) '())
+                    (if (positive? page) (list #f) '())))
            (message (question-message
                      question page (length questions) context))
            (remaining (remaining-time deadline clock))
@@ -145,6 +146,7 @@ headless verification."
                  (reader (single-question-prompt question) choices
                          #:selection-mode 'menu-index
                          #:input-enabled? #f
+                         #:option-details option-details
                          #:initial-selected-index
                          (initial-choice-index state question options)
                          #:message message
