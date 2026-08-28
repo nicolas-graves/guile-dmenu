@@ -121,7 +121,10 @@
                  '() #f (lambda (input) (not (string-null? input)))
                  #:selection-mode 'text
                  #:input-enabled? #t
-                 #:message message
+                 #:message
+                 (string-append
+                  "Add context to the selected choice  ·  Enter attach  ·  Esc back\n"
+                  message)
                  #:timeout remaining))))
 
 (define* (ask-questions/result questions
@@ -187,7 +190,9 @@ headless verification."
           (unless (and (integer? index) (<= 0 index) (< index (length options)))
             (error "graphical question returned an invalid comment index" index))
           (let ((option (list-ref options index)))
-            (call-with-values
+            (let ((selected (question-state-select
+                             state (question-option-id option))))
+             (call-with-values
                 (lambda ()
                   (reader-result
                    (read-comment reader question option message deadline clock)))
@@ -195,17 +200,19 @@ headless verification."
                 (cond
                  ((eq? comment-status 'timed-out)
                   (timeout-result state auto-resolve?))
+                 ((eq? comment-status 'cancelled)
+                  (loop selected))
                  ((not (eq? comment-status 'answered))
                   (make-question-result comment-status #f))
                  (else
                   (let* ((answered
                           (question-state-answer-comment
-                           state (question-option-id option) text))
+                           selected (question-option-id option) text))
                          (next (advance-or-complete
                                 answered page (length questions))))
                     (if (question-state? next)
                         (loop next)
-                        (make-question-result 'answered next))))))))))
+                        (make-question-result 'answered next)))))))))))
        ((not (and (integer? answer) (exact? answer)
                   (<= 0 answer) (< answer (length choices))))
         (error "graphical question returned an invalid choice index" answer))

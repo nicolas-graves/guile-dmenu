@@ -167,6 +167,33 @@
          stdout
          "{\"id\":\"detail\",\"answer\":{\"other\":\"custom detail\"}}"))
       (test-equal "interactive question emitted no diagnostics" "" stderr))))
+  (let* ((request
+          (string-append
+           "{\"timeout\":10,\"questions\":["
+           "{\"id\":\"direction\",\"prompt\":\"Direction?\",\"options\":["
+           "{\"id\":\"polish\",\"label\":\"Polish\"},"
+           "{\"id\":\"integrate\",\"label\":\"Integrate\"}]}]}"))
+         (client (start-questions session request)))
+    (eventually "comment question window was configured"
+                (lambda ()
+                  (configured-event (read-river-manager-events session))))
+    ;; Ask to qualify the highlighted choice, then type the attached comment
+    ;; in the fresh editable Wayland session.
+    (river-session-wtype
+     session
+     "-s" "100" "-k" "Tab"
+     "-s" "400" "cover tab comments in river" "-k" "Return")
+    (let ((status (cdr (waitpid (car client))))
+          (stdout (get-string-all (cadr client)))
+          (stderr (get-string-all (caddr client))))
+      (test-equal "choice comment exits successfully" 0
+        (status:exit-val status))
+      (test-assert "choice comment retains its selected stable id"
+        (string-contains stdout "\"choice\":\"polish\""))
+      (test-assert "choice comment retains its typed qualification"
+        (string-contains stdout
+                         "\"comment\":\"cover tab comments in river\""))
+      (test-equal "choice comment emitted no diagnostics" "" stderr))))
 
 (test-begin "guile-dmenu integration")
 (call-with-headless-river-session

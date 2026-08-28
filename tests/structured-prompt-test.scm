@@ -76,6 +76,25 @@
            (set! replies (cdr replies))
            reply)))))
 
+  (let ((replies '((comment 0) (reader-result cancelled #f) 0))
+        (initial-indices '()))
+    (test-equal "Escape from a comment returns to the selected choice"
+      '((mode . safe))
+      (ask-questions
+       (list first)
+       #:reader
+       (lambda* (prompt choices
+                 #:optional predicate require-match
+                 #:key initial-selected-index
+                 #:allow-other-keys)
+         (set! initial-indices
+               (append initial-indices (list initial-selected-index)))
+         (let ((reply (car replies)))
+           (set! replies (cdr replies))
+           reply))))
+    (test-equal "returning from a comment keeps its choice highlighted"
+      '(1 #f 0) initial-indices))
+
   (let ((result (ask-questions/result
                  (list first) #:reader (lambda args 1))))
     (test-eq "structured success reports answered"
