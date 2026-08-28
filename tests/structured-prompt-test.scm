@@ -101,5 +101,48 @@
       (ask-questions (list other-question) #:reader other-reader))
     (test-equal "Other switches from indexed choice to text entry"
       '(menu-index text) modes))
+
+  (let ((times '(10 11 13))
+        (replies '(0 1))
+        (timeouts '()))
+    (define (clock)
+      (let ((value (car times)))
+        (set! times (cdr times))
+        value))
+    (define* (timed-reader prompt choices
+                           #:key selection-mode input-enabled?
+                           initial-selected-index message timeout)
+      (set! timeouts (append timeouts (list timeout)))
+      (let ((answer (car replies)))
+        (set! replies (cdr replies))
+        answer))
+    (test-equal "batch completes under one decreasing deadline"
+      '((mode . safe) (publish . no))
+      (ask-questions (list first second) #:reader timed-reader
+                     #:timeout 10 #:clock clock))
+    (test-equal "each page receives only the remaining batch time"
+      '(9 7) timeouts))
+
+  (let ((times '(0 1 6))
+        (reader-calls 0))
+    (define (clock)
+      (let ((value (car times)))
+        (set! times (cdr times))
+        value))
+    (define* (expiring-reader prompt choices
+                              #:key selection-mode input-enabled?
+                              initial-selected-index message timeout)
+      (set! reader-calls (+ reader-calls 1))
+      0)
+    (test-eqv "deadline expiration cancels before opening another page" #f
+      (ask-questions (list first second) #:reader expiring-reader
+                     #:timeout 5 #:clock clock))
+    (test-equal "expired batch does not invoke the reader again"
+      1 reader-calls))
+
+  (test-error "zero batch timeout is rejected" #t
+    (ask-questions (list first) #:reader (lambda args #f) #:timeout 0))
+  (test-error "non-numeric batch timeout is rejected" #t
+    (ask-questions (list first) #:reader (lambda args #f) #:timeout "soon"))
   (test-end "graphical structured prompt adapter")
   (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1)))

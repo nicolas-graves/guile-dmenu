@@ -89,10 +89,9 @@ public API changes.
   graphical execution, collision-proof index-to-id selection with input
   filtering disabled, navigation controls outside the option-id namespace,
   recommended or retained initial selection, opt-in free-form Other answers
-  tagged distinctly from option ids, id-to-answer results, and cancellation.
+  tagged distinctly from option ids, one monotonic deadline shared by every
+  page and Other prompt, id-to-answer results, and cancellation.
 - Treat the following as essential readiness gates rather than optional polish:
-  - enforce one overall monotonic deadline across the complete batch rather
-    than restarting the timeout for every page;
   - support optional automatic resolution explicitly configured by the caller;
     otherwise expiration must report a timeout;
   - expose structured outcomes that distinguish answered, user-cancelled,
@@ -146,7 +145,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 236 passing tests; no
+- Unit-suite status is documented from the current 242 passing tests; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline

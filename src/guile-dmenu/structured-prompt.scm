@@ -8,6 +8,9 @@
 (define %back-label "← Back")
 (define %other-label "Other…")
 
+(define (monotonic-seconds)
+  (/ (get-internal-real-time) internal-time-units-per-second))
+
 (define (graphical-reader . arguments)
   (apply (module-ref (resolve-interface '(guile-dmenu menu)) 'completing-read)
          arguments))
@@ -50,19 +53,32 @@
       (question-state-complete state)
       (question-state-next state)))
 
-(define (read-other reader question message timeout)
-  (reader (string-append (single-question-prompt question) " — Other")
-          '() #f (lambda (input) (not (string-null? input)))
-          #:selection-mode 'text
-          #:input-enabled? #t
-          #:message message
-          #:timeout timeout))
+(define (remaining-time deadline clock)
+  (and deadline (- deadline (clock))))
 
-(define* (ask-questions questions #:key (reader graphical-reader) (timeout #f))
+(define (read-other reader question message deadline clock)
+  (let ((remaining (remaining-time deadline clock)))
+    (and (or (not remaining) (> remaining 0))
+         (reader (string-append (single-question-prompt question) " — Other")
+                 '() #f (lambda (input) (not (string-null? input)))
+                 #:selection-mode 'text
+                 #:input-enabled? #t
+                 #:message message
+                 #:timeout remaining))))
+
+(define* (ask-questions questions
+                        #:key (reader graphical-reader) (timeout #f)
+                        (clock monotonic-seconds))
   "Display QUESTIONS as real graphical menu sessions and return id answers.
 READER defaults to `completing-read'; injecting it is useful for embedding and
 headless verification.  Cancellation from any page returns #f."
-  (let loop ((state (make-question-state questions)))
+  (unless (or (not timeout)
+              (and (real? timeout) (> timeout 0)))
+    (error "question timeout must be a positive real number or #f" timeout))
+  (unless (procedure? clock)
+    (error "question clock must be a procedure" clock))
+  (let ((deadline (and timeout (+ (clock) timeout))))
+   (let loop ((state (make-question-state questions)))
     (let* ((question (question-state-current-question state))
            (page (question-state-page state))
            (options (single-question-options question))
@@ -74,13 +90,16 @@ headless verification.  Cancellation from any page returns #f."
                             (if (positive? page) (list %back-label) '())))
            (message (question-message
                      question page (length questions)))
-           (answer (reader (single-question-prompt question) choices
-                           #:selection-mode 'menu-index
-                           #:input-enabled? #f
-                           #:initial-selected-index
-                           (initial-choice-index state question options)
-                           #:message message
-                           #:timeout timeout)))
+           (remaining (remaining-time deadline clock))
+           (answer
+            (and (or (not remaining) (> remaining 0))
+                 (reader (single-question-prompt question) choices
+                         #:selection-mode 'menu-index
+                         #:input-enabled? #f
+                         #:initial-selected-index
+                         (initial-choice-index state question options)
+                         #:message message
+                         #:timeout remaining))))
       (cond
        ((not answer) (question-state-cancel state))
        ((not (and (integer? answer) (exact? answer)
@@ -89,7 +108,7 @@ headless verification.  Cancellation from any page returns #f."
        ((and (positive? page) (= answer back-index))
         (loop (question-state-back state)))
        ((and allow-other? (= answer other-index))
-        (let ((text (read-other reader question message timeout)))
+        (let ((text (read-other reader question message deadline clock)))
           (if (not text)
               (question-state-cancel state)
               (let ((answered (question-state-answer-other state text)))
@@ -102,4 +121,4 @@ headless verification.  Cancellation from any page returns #f."
                           state (question-option-id option))))
           (let ((next (advance-or-complete
                        selected page (length questions))))
-            (if (question-state? next) (loop next) next))))))))
+            (if (question-state? next) (loop next) next)))))))))

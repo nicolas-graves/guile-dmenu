@@ -53,7 +53,7 @@ boundary rather than an implementation gap.
 | Completion help and candidate cycling | visible/paged menu | yes | visible choices | missing | Wishlist for the rich engine |
 | Multiple completed values in one input | multi-selection | ~completing-read-multiple~ | question batch | missing | Wishlist |
 | Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | Available through ~#:message~ |
-| Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Cancellation, closure, and timeout return ~#f~ |
+| Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline; cancellation, closure, and timeout return ~#f~ |
 | Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | partial | Wishlist: promote existing primitives into a convenience API |
 | Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
 | Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids are independent of labels; recommended or retained answers set the initial highlight |
