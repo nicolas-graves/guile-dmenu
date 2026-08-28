@@ -9,7 +9,7 @@
 (define (call-with-codex-presentation thunk)
   "Call THUNK with presentation defaults suited to Codex question dialogs."
   (parameterize ((menu-width 760)
-                 (menu-padding 8)
+                 (menu-padding 6)
                  (menu-max-options 6)
                  (background-color (rgb "#161b22"))
                  (foreground-color (rgb "#c9d1d9"))
@@ -24,7 +24,7 @@
                  (alt-foreground-color (rgb "#c9d1d9"))
                  (border-color (rgb "#30363d"))
                  (border-width 1)
-                 (line-height 34)
+                 (line-height 30)
                  (fixed-height? #f)
                  (prefix-text "› "))
     (thunk)))

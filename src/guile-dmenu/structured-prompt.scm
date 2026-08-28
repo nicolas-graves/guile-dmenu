@@ -68,8 +68,8 @@
     (string-join
      (append (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Enter confirm  ·  Esc cancel"
                            (+ page 1) total))
-             (if context (list "" context) '())
-             (if (null? descriptions) '() (cons "" descriptions)))
+             (if context (list context) '())
+             descriptions)
      "\n")))
 
 (define (option-index options selected)
