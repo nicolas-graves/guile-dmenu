@@ -57,10 +57,13 @@
         (commenting? (and comment-state #t))
         (state-message-lines
          (append
-          message-lines
           (if comment-state
-              (list "Comment on the selected choice  ·  Enter attach  ·  Esc back")
-              '())
+              (cons "Comment on selected choice  ·  Enter attach  ·  Esc back"
+                    ;; Structured prompts put general shortcuts first and
+                    ;; caller context afterwards.  Replace only the shortcuts
+                    ;; while the editor is active.
+                    (if (pair? message-lines) (cdr message-lines) '()))
+              message-lines)
           (if (and details-visible? (pair? option-details))
               (let* ((index (completing-read-state-selected-index state))
                      (detail (and (< index (length option-details))

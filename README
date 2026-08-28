@@ -63,7 +63,7 @@ boundary rather than an implementation gap.
 | stdin choices and stdout result | yes | no | no | supported | Preserve the lean dmenu contract |
 | Fast filtering of plain string lists | yes | yes | small fixed choice sets | supported | Rich completion work must not materially slow this path |
 | Selectable case sensitivity | ~--ignorecase~ | ~completion-ignore-case~ | not applicable | partial | Wishlist: expose the existing library parameter through dmenu |
-| Prompt, prefix, row limit, wrap, border, height, and colors | yes | prompt and faces | prompt UI | partial | Wishlist: remaining useful vertical presentation |
+| Prompt, prefix, row limit, wrap, border, height, and colors | yes | prompt and faces | prompt UI | partial | Codex mode uses a focused red two-pixel contour; wishlist: remaining useful vertical presentation |
 | Top/bottom/center placement, monitor, margin, and width | yes | Emacs-managed | host-managed | missing | Wishlist, subject to suitable Wayland protocols |
 | Scrollbar, result counter, font, cursor sizing, and border radius | yes | Emacs-managed | host-managed | missing | Wishlist |
 | Pointer and touch selection | yes | Emacs input events | host UI | missing | Wishlist |

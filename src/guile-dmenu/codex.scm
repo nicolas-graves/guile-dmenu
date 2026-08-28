@@ -22,7 +22,7 @@
                  (title-foreground-color (rgb "#ffffff"))
                  (alt-background-color (rgb "#ffffff"))
                  (alt-foreground-color (rgb "#24292f"))
-                 (border-color (rgb "#d0d7de"))
+                 (border-color (rgb "#ff0000"))
                  (border-width 2)
                  (line-height 30)
                  (fixed-height? #f)
