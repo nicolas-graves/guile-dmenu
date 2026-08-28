@@ -20,6 +20,7 @@
             handle-previous-history
             handle-next-default
             handle-previous-default
+            clear-completion-immediacy
             wrap-navigation?
             ;; State record exports
             make-completing-read-state
@@ -148,6 +149,28 @@ whose car is a string and whose cdr is an integer position within that string."
        (lambda (opt)
          (string-contains-ci opt input))
        options)))
+
+;; A keyboard event other than TAB or RET breaks the adjacency required by
+;; `confirm-after-completion'.  Keep this separate from individual editing
+;; transitions so boundary no-ops clear the flag too.
+(define (clear-completion-immediacy state)
+  (if (not (completing-read-state-completion-invoked? state))
+      state
+      (make-completing-read-state
+       (completing-read-state-input-text state)
+       (completing-read-state-selected-index state)
+       (completing-read-state-filtered-options state)
+       (completing-read-state-cursor-position state)
+       (completing-read-state-confirmation-input state) #f
+       (completing-read-state-defaults state)
+       (completing-read-state-default-index state)
+       (completing-read-state-inherit-input-method? state)
+       (completing-read-state-history state)
+       (completing-read-state-history-position state)
+       (completing-read-state-history-start-position state)
+       (completing-read-state-history-start-input state)
+       (completing-read-state-completion-metadata state)
+       (completing-read-state-completion-boundaries state))))
 
 ;; Helper to update state with new input text and reset selection
 (define* (update-text-and-filter state new-text options

@@ -68,10 +68,13 @@ cancellation."
   (lookup-completion-style completion-style)
   ;; Validate initial input before connecting to Wayland so malformed public
   ;; calls fail synchronously and without compositor side effects.
-  (call-with-values (lambda () (normalize-initial-input initial-input)) list)
-  (normalize-defaults default)
-  (call-with-values (lambda () (normalize-history history)) list)
-  (let* ((candidates (normalize-collection collection predicate))
+  (let ((normalized-initial
+         (call-with-values
+             (lambda () (normalize-initial-input initial-input)) list)))
+    (normalize-defaults default)
+    (call-with-values (lambda () (normalize-history history)) list)
+    (let* ((candidates (normalize-collection collection predicate
+                                            (car normalized-initial)))
          (options (map completion-candidate-display candidates))
          (maximum (or (menu-max-options) (length options)))
          (message-lines (if message
@@ -133,6 +136,13 @@ cancellation."
                   (unless (eq? event 'wayland)
                     (wl-display-cancel-read display)
                     (set! read-prepared? #f))
+                  ;; Every decoded key other than TAB and RET breaks TAB/RET
+                  ;; adjacency, even if its transition is a boundary no-op.
+                  (when (or (memq event '(next previous next-default
+                                          previous-default left right home end
+                                          backspace ctrl+backspace))
+                            (and (pair? event) (eq? (car event) 'input-char)))
+                    (set! s (clear-completion-immediacy s)))
                   (match event
                     ('select
                      (match (handle-submit
@@ -215,5 +225,5 @@ cancellation."
                (set! read-prepared? #f))
              (wl-display-disconnect display)
              answer))))
-     #:parallelism 1
-     #:drain? #f)))
+      #:parallelism 1
+      #:drain? #f))))

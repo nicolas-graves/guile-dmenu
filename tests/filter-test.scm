@@ -1,6 +1,9 @@
 (use-modules (guile-dmenu completion)
+             (guile-dmenu cursor-render)
              (guile-dmenu filter)
+             (cairo)
              (ice-9 hash-table)
+             (rnrs bytevectors)
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -139,6 +142,23 @@
                    #:collection require-match-options
                    #:require-match 'confirm-after-completion)))
 
+(let* ((completed (cadr (handle-complete
+                         (submit-state "literal")
+                         require-match-options require-match-options)))
+       ;; The event loop clears immediacy before dispatching every non-TAB/RET
+       ;; key, including this Right-at-end boundary no-op.
+       (after-key (clear-completion-immediacy completed))
+       (boundary-result (handle-right after-key)))
+  (test-equal "boundary no-op remains a no-change editing transition"
+    'no-change (car boundary-result))
+  (test-assert "a key between TAB and RET clears completion immediacy"
+    (not (completing-read-state-completion-invoked? after-key)))
+  (test-equal "RET after an intervening boundary key does not confirm"
+    '(selected "literal")
+    (handle-submit (cadr boundary-result) 'text
+                   #:collection require-match-options
+                   #:require-match 'confirm-after-completion)))
+
 (test-end "require-match submission")
 
 (test-begin "collection normalization")
@@ -250,6 +270,89 @@
    "a" (lambda (input predicate action) '(boundaries 9 . 9)) #f "bc"))
 
 (test-end "collection normalization")
+
+(test-begin "public initial collection input")
+
+(let ((received #f))
+  (call-with-values
+      (lambda () (normalize-initial-input '("seed text" . 4)))
+    (lambda (text position)
+      (normalize-collection
+       (lambda (input predicate action)
+         (set! received input)
+         '("seed text"))
+       #f text)))
+  (test-equal "normalized initial text is sent to a programmed collection"
+    "seed text" received))
+
+(test-end "public initial collection input")
+
+(test-begin "in-memory cursor rendering")
+
+(define render-width 240)
+(define render-padding 4)
+(define render-height 22)
+
+(define (measured-cursor-x cr input input-x cursor-position)
+  (cairo-select-font-face cr "Sans" 'normal 'normal)
+  (cairo-set-font-size cr 14)
+  (inexact->exact
+   (floor (+ input-x 2
+             (cairo-text-extents:x-advance
+              (cairo-text-extents cr
+                                  (substring input 0 cursor-position)))))))
+
+(define (rendered-cursor-x input cursor-position)
+  (let* ((surface (cairo-image-surface-create
+                   'argb32 render-width render-height))
+         (cr (cairo-create surface))
+         (input-x 24)
+         (expected (measured-cursor-x cr input input-x cursor-position)))
+    ;; Black text on a black surface leaves the white cursor as the only
+    ;; non-black pixels, so its rectangle can be located in the image data.
+    (cairo-set-source-rgb cr 0 0 0)
+    (cairo-paint cr)
+    (draw-input-cursor! cr input cursor-position input-x render-padding
+                        render-height '(1 1 1))
+    (cairo-surface-flush surface)
+    (let* ((pixels (cairo-image-surface-get-data surface))
+           (stride (inexact->exact
+                    (cairo-image-surface-get-stride surface)))
+           (painted-columns
+            (filter
+             (lambda (x)
+               (any (lambda (y)
+                      (let ((offset (+ (* y stride) (* x 4))))
+                        (or (> (bytevector-u8-ref pixels offset) 0)
+                            (> (bytevector-u8-ref pixels (+ offset 1)) 0)
+                            (> (bytevector-u8-ref pixels (+ offset 2)) 0))))
+                    (iota render-height)))
+             (iota render-width))))
+      (cairo-destroy cr)
+      (cairo-surface-destroy surface)
+      (list expected (and (pair? painted-columns) (car painted-columns))))))
+
+(for-each
+ (lambda (fixture)
+   (let ((label (car fixture))
+         (input (cadr fixture))
+         (position (caddr fixture)))
+     (let ((coordinates (rendered-cursor-x input position)))
+       (test-equal label (car coordinates) (cadr coordinates)))))
+ '(("cursor rectangle is at the beginning of empty input" "" 0)
+   ("cursor rectangle is in the middle of input" "abcd" 2)
+   ("cursor rectangle is at trailing-space x-advance" "ab " 3)))
+
+(let* ((surface (cairo-image-surface-create 'argb32 1 1))
+       (cr (cairo-create surface))
+       (extents (cairo-text-extents cr "ab ")))
+  (test-assert "trailing whitespace advances beyond its ink rectangle"
+    (> (cairo-text-extents:x-advance extents)
+       (cairo-text-extents:width extents)))
+  (cairo-destroy cr)
+  (cairo-surface-destroy surface))
+
+(test-end "in-memory cursor rendering")
 
 (test-begin "substring completion")
 

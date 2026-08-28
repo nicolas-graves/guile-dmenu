@@ -1,4 +1,5 @@
 (define-module (guile-dmenu graphics)
+  #:use-module (guile-dmenu cursor-render)
   #:use-module (guile-dmenu memory-utils)
   #:use-module (wayland client protocol wayland)
   #:use-module (ice-9 format)
@@ -306,14 +307,8 @@
 
       ;; Draw the cursor after the text preceding its character position.
       (when input-enabled?
-       (let* ((input-before-cursor
-               (substring input-text 0 cursor-position))
-              (input-extents (cairo-text-extents cr input-before-cursor))
-             (input-width (cairo-text-extents:width input-extents))
-             (cursor-x (+ x-position input-width 2)))
-        (apply cairo-set-source-rgb cr cb)
-        (cairo-rectangle cr cursor-x padding 2 (- row-height (/ (* 3 padding) 2)))
-        (cairo-fill cr)))
+        (draw-input-cursor! cr input-text cursor-position x-position padding
+                            row-height cb))
 
       ;; Read-only detail panel.
       (let loop ((lines message-lines) (index 0))
