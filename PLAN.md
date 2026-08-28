@@ -104,6 +104,11 @@ public API changes.
 - `codex-dmenu-approval` now uses the structured prompt API, so the real
   Codex-facing consumer exercises stable option ids and structured outcomes
   without changing its fail-safe empty-output fallback contract.
+- The packaged structured command now passes a real headless River session:
+  timeout and a multi-page interaction exercise retained-answer replacement,
+  Back navigation, free-form Other input, stable-id JSON serialization, clean
+  stderr, and continued Wayland protocol health. This is sufficient for a pure
+  Codex-style various-choice hook replacement wherever Codex exposes a hook.
 - Do not claim transparent replacement of ordinary Codex questions until Codex
   exposes an integration point for redirecting them. The currently documented
   `PermissionRequest` hook covers approval requests only; this external product
@@ -143,7 +148,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 273 passing Scheme tests
+- Unit-suite status is documented from the current 275 passing Scheme tests
   plus the approval command regression test; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
@@ -155,9 +160,12 @@ Acceptance checks:
 - Command-boundary tests cover valid JSON, malformed input, stdout purity,
   diagnostics, cancellation, and failure outcomes without leaking prompt data
   through process arguments or environment variables.
-- A headless Wayland integration test exercises a real multi-page question,
-  Back with retained answers, free-form Other input, timeout, window closure,
-  and compositor failure instead of relying only on an injected reader.
+- The headless Wayland integration test exercises a real multi-page question,
+  Back with retained-answer replacement, free-form Other input, timeout, clean
+  stderr, and continued protocol health instead of relying only on an injected
+  reader. Add a real compositor-driven window-close case. Compositor failure is
+  already covered at the executable boundary with a missing display, and both
+  close and failure outcomes remain covered by structured unit tests.
 - The Codex approval integration is regression-tested for allow, deny, review
   in terminal, deadline exhaustion under lock contention, malformed hook
   input, and graphical failure. All fallback cases leave stdout empty, and
