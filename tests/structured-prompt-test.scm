@@ -37,8 +37,10 @@
     (not (list-ref (car calls) 3)))
   (test-equal "recommended option is highlighted initially"
     1 (list-ref (car calls) 4))
-  (test-assert "adapter exposes descriptions in the graphical message"
-    (string-contains (list-ref (car calls) 5) "Safe: Check first"))
+  (test-assert "adapter places descriptions directly in selectable options"
+    (string-contains (car (cadr (car calls))) "Check first"))
+  (test-assert "adapter does not repeat descriptions in context"
+    (not (string-contains (list-ref (car calls) 5) "Check first")))
   (let ((captured-message #f))
     (ask-questions
      (list first)
@@ -51,7 +53,7 @@
     (test-assert "adapter exposes caller context in the graphical message"
       (string-contains captured-message "Working directory: /tmp/project"))
     (test-assert "adapter includes concise navigation help"
-      (string-contains captured-message "Enter confirm")))
+      (string-contains captured-message "Tab/Shift+Tab")))
   (test-error "adapter rejects non-string context" #t
     (ask-questions (list first) #:reader (lambda args 0) #:context '(bad)))
   (test-eqv "graphical cancellation stays distinct" #f

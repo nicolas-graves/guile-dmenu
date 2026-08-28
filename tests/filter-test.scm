@@ -167,6 +167,23 @@
      (cadr boundary-result) 'select require-match-options require-match-options
      #:require-match 'confirm-after-completion)))
 
+(let* ((options '("one" "two" "three"))
+       (initial (make-completing-read-state "" 0 options))
+       (tabbed (cadr (dispatch-completing-read-event
+                      initial 'complete options options
+                      #:input-enabled? #f)))
+       (back-tabbed (cadr (dispatch-completing-read-event
+                           tabbed 'complete-previous options options
+                           #:input-enabled? #f))))
+  (test-equal "TAB advances selection in a read-only menu"
+    1 (completing-read-state-selected-index tabbed))
+  (test-equal "Shift+TAB moves selection backward in a read-only menu"
+    0 (completing-read-state-selected-index back-tabbed))
+  (test-equal "Shift+TAB remains inert for editable completion"
+    'no-change
+    (car (dispatch-completing-read-event
+          initial 'complete-previous options options #:input-enabled? #t))))
+
 (test-end "require-match submission")
 
 (test-begin "collection normalization")

@@ -55,22 +55,18 @@
 (define (option-display option)
   (string-append
    (question-option-label option)
-   (if (question-option-recommended? option) " (Recommended)" "")))
+   (if (question-option-recommended? option) " (Recommended)" "")
+   (if (question-option-description option)
+       (string-append " — " (question-option-description option))
+       "")))
 
 (define (question-message question page total context)
-  (let ((descriptions
-         (filter-map
-          (lambda (option)
-            (and (question-option-description option)
-                 (string-append (question-option-label option) ": "
-                                (question-option-description option))))
-          (single-question-options question))))
-    (string-join
-     (append (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Enter confirm  ·  Esc cancel"
-                           (+ page 1) total))
-             (if context (list context) '())
-             descriptions)
-     "\n")))
+  (string-join
+   (append
+    (list (format #f "Question ~a of ~a  ·  ↑↓ or Tab/Shift+Tab choose  ·  Enter confirm  ·  Esc cancel"
+                  (+ page 1) total))
+    (if context (list context) '()))
+   "\n"))
 
 (define (option-index options selected)
   (and (question-option? selected)

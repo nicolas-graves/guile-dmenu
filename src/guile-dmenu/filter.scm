@@ -233,7 +233,11 @@ whose car is a string and whose cdr is an integer position within that string."
       ('complete
        (if input-enabled?
            (handle-complete state collection options predicate #:style style)
-           (list 'no-change state)))
+           (handle-next state)))
+      ('complete-previous
+       (if input-enabled?
+           (list 'no-change state)
+           (handle-previous state)))
       (('input-char char)
        (if input-enabled?
            (handle-input-char char state options)
