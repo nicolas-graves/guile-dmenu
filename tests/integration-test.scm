@@ -38,7 +38,7 @@
           (close-port (cdr input))
           (list pid (car output) (car errors))))))
 
-(define (start-questions session)
+(define (start-questions session request)
   (let* ((input (pipe))
          (output (pipe))
          (errors (pipe))
@@ -58,16 +58,8 @@
           (close-port (car input))
           (close-port (cdr output))
           (close-port (cdr errors))
-          (display
-           (string-append
-            "{\"timeout\":1,\"questions\":["
-            "{\"id\":\"first\",\"prompt\":\"First?\",\"options\":["
-            "{\"id\":\"yes\",\"label\":\"Yes\"},"
-            "{\"id\":\"no\",\"label\":\"No\"}]},"
-            "{\"id\":\"second\",\"prompt\":\"Second?\",\"options\":["
-            "{\"id\":\"a\",\"label\":\"A\"},"
-            "{\"id\":\"b\",\"label\":\"B\"}]}]}\n")
-           (cdr input))
+          (display request (cdr input))
+          (newline (cdr input))
           (close-port (cdr input))
           (list pid (car output) (car errors))))))
 
@@ -106,7 +98,16 @@
     (test-equal "dmenu emitted no diagnostics" "" stderr)
     (test-assert "River reported no protocol error"
       (not (string-contains river-log "protocol error"))))
-  (let* ((client (start-questions session))
+  (let* ((request
+          (string-append
+           "{\"timeout\":1,\"questions\":["
+           "{\"id\":\"first\",\"prompt\":\"First?\",\"options\":["
+           "{\"id\":\"yes\",\"label\":\"Yes\"},"
+           "{\"id\":\"no\",\"label\":\"No\"}]},"
+           "{\"id\":\"second\",\"prompt\":\"Second?\",\"options\":["
+           "{\"id\":\"a\",\"label\":\"A\"},"
+           "{\"id\":\"b\",\"label\":\"B\"}]}]}"))
+         (client (start-questions session request))
          (configured
           (eventually "question command acknowledged configure"
                       (lambda ()
@@ -121,11 +122,49 @@
       configured)
     (test-equal "question timeout exits successfully" 0
       (status:exit-val status))
-    (test-assert "question timeout emits its structured outcome"
-      (string-contains stdout "\"status\":\"timed-out\""))
+    (test-equal "question timeout emits its structured outcome"
+      "{\"status\":\"timed-out\",\"answers\":false}\n" stdout)
     (test-equal "question command emitted no diagnostics" "" stderr)
     (test-assert "question command caused no protocol error"
-      (not (string-contains river-log "protocol error")))))
+      (not (string-contains river-log "protocol error"))))
+  (let* ((request
+          (string-append
+           "{\"timeout\":10,\"questions\":["
+           "{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":["
+           "{\"id\":\"safe\",\"label\":\"Safe\"},"
+           "{\"id\":\"fast\",\"label\":\"Fast\"}]},"
+           "{\"id\":\"detail\",\"prompt\":\"Detail?\","
+           "\"allowOther\":true,\"options\":["
+           "{\"id\":\"short\",\"label\":\"Short\"},"
+           "{\"id\":\"long\",\"label\":\"Long\"}]}]}"))
+         (client (start-questions session request)))
+    (eventually "interactive question window was created"
+                (lambda ()
+                  (member '(window-created 3)
+                          (read-river-manager-events session))))
+    ;; Choose Fast; go Back from page two; change to Safe; then choose Other
+    ;; and enter free-form text.  Pauses span the separate Wayland sessions
+    ;; opened for each page and for the text reader.
+    (river-session-wtype
+     session
+     "-k" "Down" "-k" "Return"
+     "-s" "250" "-k" "End" "-k" "Return"
+     "-s" "250" "-k" "Up" "-k" "Return"
+     "-s" "250" "-k" "Down" "-k" "Down" "-k" "Return"
+     "-s" "250" "custom detail" "-k" "Return")
+    (let ((status (cdr (waitpid (car client))))
+          (stdout (get-string-all (cadr client)))
+          (stderr (get-string-all (caddr client))))
+      (test-equal "interactive question exits successfully" 0
+        (status:exit-val status))
+      (test-assert "Back permits replacing the retained first answer"
+        (string-contains stdout
+                         "{\"id\":\"mode\",\"answer\":\"safe\"}"))
+      (test-assert "Other returns tagged free-form text"
+        (string-contains
+         stdout
+         "{\"id\":\"detail\",\"answer\":{\"other\":\"custom detail\"}}"))
+      (test-equal "interactive question emitted no diagnostics" "" stderr))))
 
 (test-begin "guile-dmenu integration")
 (call-with-headless-river-session

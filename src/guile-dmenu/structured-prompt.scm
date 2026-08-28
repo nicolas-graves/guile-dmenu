@@ -29,8 +29,10 @@
     (lambda ()
       (let* ((menu (resolve-interface '(guile-dmenu menu)))
              (read (module-ref menu 'completing-read/result))
-             (status (module-ref menu 'completing-read-result-status))
-             (value (module-ref menu 'completing-read-result-value))
+             (status
+              (module-ref menu 'completing-read-result-status-procedure))
+             (value
+              (module-ref menu 'completing-read-result-value-procedure))
              (result (apply read arguments)))
         (list 'reader-result (status result) (value result))))
     (lambda args '(reader-result graphical-failure #f))))

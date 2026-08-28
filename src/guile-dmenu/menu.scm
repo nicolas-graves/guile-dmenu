@@ -19,6 +19,8 @@
             completing-read-result?
             completing-read-result-status
             completing-read-result-value
+            completing-read-result-status-procedure
+            completing-read-result-value-procedure
             menu-width menu-padding menu-max-options)
   #:re-export (make-completion-history
                completion-history?
@@ -39,6 +41,13 @@
 
 (define (answered value) (make-completing-read-result 'answered value))
 (define (terminated status) (make-completing-read-result status #f))
+
+;; SRFI-9 accessors are syntax transformers in Guile.  These procedural
+;; bridges support callers that resolve the graphical module lazily.
+(define (completing-read-result-status-procedure result)
+  (completing-read-result-status result))
+(define (completing-read-result-value-procedure result)
+  (completing-read-result-value result))
 
 (define (draw-state prompt message-lines input-enabled? conn cache state maximum)
   (let ((surface (wayland-connection-surface conn))
