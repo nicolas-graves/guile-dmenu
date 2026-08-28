@@ -79,9 +79,12 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
   predicates receive the complete entry, while the key is displayed.
   Programmed tables receive ~(input predicate action)~.  In addition to
   ~#f~, ~#t~, and ~'lambda~ completion operations, the engine queries
-  ~'(metadata)~ and ~'(boundaries . suffix)~ during pure TAB transitions.
+  ~'metadata~ and ~'(boundaries . suffix)~ during pure TAB transitions.
   Metadata responses have the form ~'(metadata . alist)~; boundary responses
-  have the form ~'(boundaries start . end)~.  Cancellation,
+  have the form ~'(boundaries start . end)~.  TAB replaces only that bounded
+  field, preserves text on both sides, and leaves the cursor immediately
+  after the replacement.  Case-insensitive unique completion inserts the
+  candidate's canonical spelling.  Cancellation,
   closure, and timeout return ~#f~.
 
   In text mode, ~require-match~ ~#f~ accepts literal input.  ~#t~ and other

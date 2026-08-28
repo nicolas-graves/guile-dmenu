@@ -205,7 +205,7 @@
        (list "input" predicate action)
        (call-completion-table
         (lambda args args) "input" predicate action)))
-   (list #f #t 'lambda '(metadata) '(boundaries . "suffix"))))
+   (list #f #t 'lambda 'metadata '(boundaries . "suffix"))))
 
 (let* ((predicate (lambda (entry) #t))
        (calls '())
@@ -213,7 +213,7 @@
         (lambda (input supplied-predicate action)
           (set! calls (cons (list input supplied-predicate action) calls))
           (cond
-           ((equal? action '(metadata))
+           ((eq? action 'metadata)
             '(metadata (category . file)))
            ((and (pair? action) (eq? (car action) 'boundaries))
             '(boundaries 4 . 1))
@@ -271,6 +271,10 @@
 (test-equal "unique completion inserts the complete candidate"
   "beta"
   (completion-try-completion "eta" completion-fixture))
+
+(test-equal "case-folded unique completion preserves canonical casing"
+  "Alpha"
+  (completion-try-completion "ALPHA" '("Alpha")))
 
 (test-equal "ambiguous completion extends a shared prefix"
   "Alp"
@@ -387,28 +391,39 @@
           (set! actions
                 (cons (list input supplied-predicate action) actions))
           (cond
-           ((equal? action '(metadata))
+           ((eq? action 'metadata)
             '(metadata (category . path)))
            ((and (pair? action) (eq? (car action) 'boundaries))
-            '(boundaries 4 . 1))
-           ((not action) "dir/name")
+            '(boundaries 4 . 2))
+           ((not action) "name")
            (else #f))))
-       (state (make-completing-read-state "dir/nme" 0 '("dir/name") 5))
-       (updated (cadr (handle-complete state table '("dir/name") predicate))))
+       (state (make-completing-read-state "cmd nme tail" 0
+                                          '("cmd name tail") 5))
+       (updated (cadr (handle-complete state table
+                                       '("cmd name tail") predicate))))
   (test-equal "TAB records programmed metadata in pure state"
     '(metadata (category . path))
     (completing-read-state-completion-metadata updated))
   (test-equal "TAB records programmed boundaries in pure state"
-    '(4 . 1)
+    '(4 . 2)
     (completing-read-state-completion-boundaries updated))
+  (test-equal "TAB replaces only the programmed completion field"
+    "cmd name tail"
+    (completing-read-state-input-text updated))
+  (test-equal "TAB places point immediately after the replacement"
+    8
+    (completing-read-state-cursor-position updated))
   (test-equal "TAB boundary query splits input at the cursor"
-    '("dir/n" (boundaries . "me"))
+    '("cmd n" (boundaries . "me tail"))
     (let ((boundary-call
            (find (lambda (call)
                    (and (pair? (caddr call))
                         (eq? (car (caddr call)) 'boundaries)))
                  actions)))
       (list (car boundary-call) (caddr boundary-call))))
+  (test-equal "TAB completes the field selected by the boundaries"
+    "nme"
+    (car (find (lambda (call) (not (caddr call))) actions)))
   (test-assert "TAB forwards the underlying-entry predicate for every action"
     (every (lambda (call) (eq? (cadr call) predicate)) actions)))
 

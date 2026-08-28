@@ -231,7 +231,9 @@ then normalized without applying PREDICATE a second time."
       (cond
        ((null? displays) #f)
        ((null? (cdr displays))
-        (if (completion-string=? input (car displays)) #t (car displays)))
+        ;; Matching may ignore case, but the candidate remains the canonical
+        ;; spelling to insert.  Only an exact spelling is already complete.
+        (if (string=? input (car displays)) #t (car displays)))
        (else
         (let ((prefix (common-prefix displays)))
           ;; Substring matches need not begin with INPUT.  Only a shared prefix
@@ -284,7 +286,7 @@ tables."
     (error "completion input is not a string" input))
   (let ((response (and (procedure? collection)
                        (call-completion-table collection input predicate
-                                              '(metadata)))))
+                                              'metadata))))
     (if (and (pair? response) (eq? (car response) 'metadata)
              (list? (cdr response)) (every pair? (cdr response)))
         response

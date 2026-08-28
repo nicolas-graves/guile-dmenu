@@ -442,11 +442,19 @@ whose car is a string and whose cdr is an integer position within that string."
          (suffix (substring input cursor))
          (metadata (completion-metadata prefix collection predicate))
          (boundaries (completion-boundaries prefix collection predicate suffix))
+         (field-start (car boundaries))
+         (field-end (+ cursor (cdr boundaries)))
+         (field (substring input field-start field-end))
          (completion (completion-try-completion
-                      input collection predicate #:style style)))
+                      field collection predicate #:style style)))
     (if (and (string? completion)
-             (not (string=? completion input)))
-        (let ((updated (update-text-and-filter state completion options)))
+             (not (string=? completion field)))
+        (let* ((new-text (string-append (substring input 0 field-start)
+                                        completion
+                                        (substring input field-end)))
+               (new-cursor (+ field-start (string-length completion)))
+               (updated (update-text-and-filter state new-text options
+                                                new-cursor)))
           (list 'state-update
                 (make-completing-read-state
                  (completing-read-state-input-text updated)
