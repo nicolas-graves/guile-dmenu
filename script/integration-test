@@ -9,6 +9,7 @@ dmenu=$(guix build -f "$project_dir/.guix/modules/guile-dmenu-package.scm")
 
 guix shell -m "$river_dir/manifest.scm" -- env \
   GUILE_DMENU="$dmenu/bin/dmenu" \
+  GUILE_DMENU_QUESTIONS="$dmenu/bin/guile-dmenu-questions" \
   GUILE_RIVER_DIR="$river_dir" \
   GUILE_LOAD_COMPILED_PATH= \
   GUILE_WAYLAND_PROTOCOL_PATH="$river_dir/protocol" \
