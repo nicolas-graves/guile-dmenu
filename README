@@ -6,6 +6,22 @@ This repository provides a Guile library and client program inspired by dmenu.
 It includes a graphical, Emacs-shaped ~completing-read~ procedure as well as a
 Wayland dmenu client.
 
+Structured questions can now drive real graphical sessions through
+~(guile-dmenu structured-prompt)~:
+
+#+begin_src scheme
+(ask-questions
+ (list (make-single-question
+        'mode "Choose a mode"
+        (list (make-question-option 'safe "Safe" #:recommended? #t)
+              (make-question-option 'fast "Fast")))))
+;; => ((mode . safe)), or #f on cancellation
+#+end_src
+
+For multiple questions, each page opens through the ordinary Wayland
+~completing-read~ path; Back preserves earlier answers and cancellation remains
+distinct from choosing a negative option.
+
 ** Feature comparison and direction
 
 The table compares the three active product inspirations with the current

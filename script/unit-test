@@ -13,5 +13,7 @@ fi
 
 guile --no-auto-compile -L "$project_dir/src" \
   "$project_dir/tests/question-test.scm"
+guile --no-auto-compile -L "$project_dir/src" \
+  "$project_dir/tests/structured-prompt-test.scm"
 exec guile --no-auto-compile -L "$project_dir/src" \
   "$project_dir/tests/filter-test.scm"
