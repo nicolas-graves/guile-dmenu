@@ -57,10 +57,12 @@ Return QUESTIONS, TIMEOUT, and AUTO-RESOLVE? as three values."
 
 (define (json-answer entry)
   (let ((answer (cdr entry)))
-    `((id . ,(car entry))
-      (answer . ,(if (question-other-answer? answer)
-                     `((other . ,(question-other-answer-text answer)))
-                     answer)))))
+    (list
+     (cons 'id (car entry))
+     (cons 'answer
+           (if (question-other-answer? answer)
+               (list (cons 'other (question-other-answer-text answer)))
+               answer)))))
 
 (define (question-result->json result)
   `((status . ,(symbol->string (question-result-status result)))

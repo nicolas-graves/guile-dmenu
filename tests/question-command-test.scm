@@ -27,6 +27,23 @@
     (test-equal "command emits selected option id" "fast"
       (assoc-ref (vector-ref (assoc-ref response "answers") 0) "answer"))))
 
+(let* ((other-request
+        "{\"questions\":[{\"id\":\"detail\",\"prompt\":\"Detail?\",\"allowOther\":true,\"options\":[{\"id\":\"short\",\"label\":\"Short\"},{\"id\":\"long\",\"label\":\"Long\"}]}]}")
+       (replies '(2 "custom detail"))
+       (output (open-output-string))
+       (reader
+        (lambda args
+          (let ((answer (car replies)))
+            (set! replies (cdr replies))
+            answer))))
+  (run-question-command (open-input-string other-request) output #:reader reader)
+  (let* ((response
+          (json->scm (open-input-string (get-output-string output))))
+         (answer
+          (assoc-ref (vector-ref (assoc-ref response "answers") 0) "answer")))
+    (test-equal "command emits tagged Other text" "custom detail"
+      (assoc-ref answer "other"))))
+
 (test-error "missing questions are rejected" #t
   (read-question-request (open-input-string "{}")))
 (test-error "a second stdin payload is rejected" #t
