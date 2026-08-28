@@ -52,6 +52,7 @@
                           #:key (message #f) (input-enabled? #t)
                           (timeout #f) (max-message-lines 12)
                           (selection-mode 'text)
+                          (initial-selected-index 0)
                           (completion-style 'substring))
   "Display COLLECTION and submit text or the highlighted menu selection.
 INITIAL-INPUT may be a string or (STRING . ZERO-BASED-POSITION).
@@ -61,7 +62,8 @@ input.  HISTORY may be a mutable completion history, a positioned history
 pair, #f, or #t to disable recording.
 SELECTION-MODE may be `text' (the default), `menu' to return the highlighted
 string, or `menu-index' to return its zero-based displayed position.  Return
-#f on cancellation."
+#f on cancellation.  INITIAL-SELECTED-INDEX controls the initially highlighted
+displayed candidate."
   (unless (memq selection-mode '(text menu menu-index))
     (error "unsupported selection mode" selection-mode))
   ;; Resolve the style before opening a Wayland connection so an invalid
@@ -94,7 +96,8 @@ string, or `menu-index' to return its zero-based displayed position.  Return
                 (display (wayland-connection-display conn))
                 (port (fdes->inport (wl-display-get-fd display)))
                 (state (initial-state options initial-input default
-                                      inherit-input-method history))
+                                      inherit-input-method history
+                                      initial-selected-index))
                 (read-prepared? #f)
                 (cache (make-menu-buffer-cache
                         (wayland-connection-shm conn)

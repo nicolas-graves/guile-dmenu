@@ -88,12 +88,11 @@ public API changes.
   descriptions, recommended markers, retained answers, Back navigation,
   graphical execution, collision-proof index-to-id selection with input
   filtering disabled, navigation controls outside the option-id namespace,
-  id-to-answer results, and cancellation.
+  recommended or retained initial selection, id-to-answer results, and
+  cancellation.
 - Treat the following as essential readiness gates rather than optional polish:
   - add optional free-form "Other" entry and return it unambiguously as an
     answer distinct from every predefined option id;
-  - make the recommended option the initial/default selection when present,
-    while retaining the marker in the presentation;
   - enforce one overall monotonic deadline across the complete batch rather
     than restarting the timeout for every page;
   - support optional automatic resolution explicitly configured by the caller;
@@ -149,7 +148,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 223 passing tests; no
+- Unit-suite status is documented from the current 229 passing tests; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline

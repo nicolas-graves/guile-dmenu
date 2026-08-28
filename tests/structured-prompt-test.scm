@@ -8,21 +8,22 @@
   (define first
     (make-single-question
      'mode "Mode?"
-     (list (make-question-option 'fast "Fast" #:recommended? #t)
-           (make-question-option 'safe "Safe" #:description "Check first"))))
+     (list (make-question-option 'safe "Safe" #:description "Check first")
+           (make-question-option 'fast "Fast" #:recommended? #t))))
   (define second
     (make-single-question
      'publish "Publish?"
      (list (make-question-option 'yes "Yes")
            (make-question-option 'no "No"))))
-  (define replies (list 0 1))
+  (define replies (list 1 1))
   (define calls '())
   (define* (reader prompt choices
-                   #:key selection-mode input-enabled? message timeout)
+                   #:key selection-mode input-enabled? initial-selected-index
+                   message timeout)
     (set! calls
           (append calls
                   (list (list prompt choices selection-mode input-enabled?
-                              message))))
+                              initial-selected-index message))))
     (let ((reply (car replies)))
       (set! replies (cdr replies))
       reply))
@@ -34,10 +35,28 @@
     'menu-index (list-ref (car calls) 2))
   (test-assert "adapter disables filtering so indices remain stable"
     (not (list-ref (car calls) 3)))
+  (test-equal "recommended option is highlighted initially"
+    1 (list-ref (car calls) 4))
   (test-assert "adapter exposes descriptions in the graphical message"
-    (string-contains (list-ref (car calls) 4) "Safe: Check first"))
+    (string-contains (list-ref (car calls) 5) "Safe: Check first"))
   (test-eqv "graphical cancellation stays distinct" #f
     (ask-questions (list first) #:reader (lambda args #f)))
+
+  (let ((replies '(0 2 0 1))
+        (initial-indices '()))
+    (define* (back-reader prompt choices
+                          #:key selection-mode input-enabled?
+                          initial-selected-index message timeout)
+      (set! initial-indices
+            (append initial-indices (list initial-selected-index)))
+      (let ((answer (car replies)))
+        (set! replies (cdr replies))
+        answer))
+    (test-equal "Back preserves a non-recommended answer"
+      '((mode . safe) (publish . no))
+      (ask-questions (list first second) #:reader back-reader))
+    (test-equal "retained answer takes precedence over recommendation"
+      '(1 0 0 0) initial-indices))
 
   (let* ((colliding
           (make-single-question
@@ -48,7 +67,8 @@
          (answers '(1))
          (index-reader
           (lambda* (prompt choices
-                    #:key selection-mode input-enabled? message timeout)
+                    #:key selection-mode input-enabled? initial-selected-index
+                    message timeout)
             (let ((answer (car answers)))
               (set! answers (cdr answers))
               answer))))

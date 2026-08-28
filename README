@@ -56,7 +56,7 @@ boundary rather than an implementation gap.
 | Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Cancellation, closure, and timeout return ~#f~ |
 | Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | partial | Wishlist: promote existing primitives into a convenience API |
 | Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
-| Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Stable option ids are independent of rendered labels |
+| Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids are independent of labels; recommended or retained answers set the initial highlight |
 | Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | missing | Wishlist for structured questions |
 | Distinguish denial, rejection, cancellation, and failure | exit/result conventions | return/quit conventions | yes | partial | Wishlist: explicit structured results; approval hook is partial |
 

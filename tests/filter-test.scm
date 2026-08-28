@@ -662,6 +662,16 @@
   (test-equal "pair initial input uses its zero-based cursor position" 2
     (completing-read-state-cursor-position state)))
 
+(let ((state (initial-state '("alpha" "beta" "gamma") "" #f #f #f 2)))
+  (test-equal "initial selected index highlights the requested candidate" 2
+    (completing-read-state-selected-index state)))
+
+(test-error "initial selected index past the candidates is rejected" #t
+  (initial-state '("alpha" "beta") "" #f #f #f 2))
+
+(test-error "initial selected index must be exact" #t
+  (initial-state '("alpha" "beta") "" #f #f #f 1.0))
+
 (test-error "negative initial cursor position is rejected" #t
   (initial-state '("alpha") '("alpha" . -1)))
 

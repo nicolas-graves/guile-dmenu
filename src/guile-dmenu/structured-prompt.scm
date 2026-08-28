@@ -28,6 +28,19 @@
      (cons (format #f "Question ~a of ~a" (+ page 1) total) descriptions)
      "\n")))
 
+(define (option-index options selected)
+  (and selected
+       (list-index
+        (lambda (option)
+          (equal? (question-option-id option)
+                  (question-option-id selected)))
+        options)))
+
+(define (initial-option-index state options)
+  (or (option-index options (question-state-selected-option state))
+      (list-index question-option-recommended? options)
+      0))
+
 (define* (ask-questions questions #:key (reader graphical-reader) (timeout #f))
   "Display QUESTIONS as real graphical menu sessions and return id answers.
 READER defaults to `completing-read'; injecting it is useful for embedding and
@@ -41,6 +54,8 @@ headless verification.  Cancellation from any page returns #f."
            (answer (reader (single-question-prompt question) choices
                            #:selection-mode 'menu-index
                            #:input-enabled? #f
+                           #:initial-selected-index
+                           (initial-option-index state options)
                            #:message (question-message
                                       question page (length questions))
                            #:timeout timeout)))

@@ -127,17 +127,27 @@ whose car is a string and whose cdr is an integer position within that string."
 ;; Create initial state, filtering from the supplied initial text and placing
 ;; the cursor either at the end of a string or at a pair's explicit position.
 (define* (initial-state options #:optional (initial-input "") (default #f)
-                        (inherit-input-method? #f) (history-argument #f))
+                        (inherit-input-method? #f) (history-argument #f)
+                        (initial-selected-index 0))
   (call-with-values
       (lambda () (normalize-initial-input initial-input))
     (lambda (text position)
       (call-with-values
           (lambda () (normalize-history history-argument))
         (lambda (history history-position)
-          (make-completing-read-state
-           text 0 (filter-options options text) position #f #f
-           (normalize-defaults default) -1 inherit-input-method?
-           history history-position history-position text))))))
+          (let ((filtered (filter-options options text)))
+            (unless (and (integer? initial-selected-index)
+                         (exact? initial-selected-index)
+                         (>= initial-selected-index 0)
+                         (if (null? filtered)
+                             (zero? initial-selected-index)
+                             (< initial-selected-index (length filtered))))
+              (error "initial selected index is outside options"
+                     initial-selected-index))
+            (make-completing-read-state
+             text initial-selected-index filtered position #f #f
+             (normalize-defaults default) -1 inherit-input-method?
+             history history-position history-position text)))))))
 
 ;; When enabled, moving past either end of the list wraps to the other end
 ;; (bemenu's -w/--wrap).
