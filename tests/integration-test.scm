@@ -138,20 +138,22 @@
            "{\"id\":\"short\",\"label\":\"Short\"},"
            "{\"id\":\"long\",\"label\":\"Long\"}]}]}"))
          (client (start-questions session request)))
-    (eventually "interactive question window was created"
+    (eventually "interactive question window was configured"
                 (lambda ()
-                  (member '(window-created 3)
-                          (read-river-manager-events session))))
+                  (find (match-lambda
+                          (('window-configured 3 _ _) #t)
+                          (_ #f))
+                        (read-river-manager-events session))))
     ;; Choose Fast; go Back from page two; change to Safe; then choose Other
     ;; and enter free-form text.  Pauses span the separate Wayland sessions
     ;; opened for each page and for the text reader.
     (river-session-wtype
      session
-     "-k" "Down" "-k" "Return"
-     "-s" "250" "-k" "End" "-k" "Return"
-     "-s" "250" "-k" "Up" "-k" "Return"
-     "-s" "250" "-k" "Down" "-k" "Down" "-k" "Return"
-     "-s" "250" "custom detail" "-k" "Return")
+     "-s" "100" "-k" "Down" "-k" "Return"
+     "-s" "400" "-k" "Down" "-k" "Down" "-k" "Down" "-k" "Return"
+     "-s" "400" "-k" "Up" "-k" "Return"
+     "-s" "400" "-k" "Down" "-k" "Down" "-k" "Return"
+     "-s" "400" "custom detail" "-k" "Return")
     (let ((status (cdr (waitpid (car client))))
           (stdout (get-string-all (cadr client)))
           (stderr (get-string-all (caddr client))))

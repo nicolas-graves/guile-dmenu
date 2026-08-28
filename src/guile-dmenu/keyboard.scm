@@ -125,7 +125,6 @@
 
     #:key
     (lambda (data keyboard serial time key state)
-      (log "Key event: key=~a state=~a~%" key state)
       ;; We can't use put-message directly here due to continuation barrier
       ;; Instead, spawn a fiber to do it
       (spawn-fiber
