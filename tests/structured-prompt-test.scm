@@ -206,5 +206,27 @@
     (ask-questions (list first) #:reader (lambda args #f) #:timeout 0))
   (test-error "non-numeric batch timeout is rejected" #t
     (ask-questions (list first) #:reader (lambda args #f) #:timeout "soon"))
+
+  (let ((result (confirm/result "Continue?" #:reader (lambda args 0))))
+    (test-eq "confirmation success uses structured outcomes"
+      'answered (question-result-status result))
+    (test-equal "confirmation returns a stable yes answer"
+      '((confirmation . yes)) (question-result-answers result)))
+  (test-assert "confirmation convenience returns true for yes"
+    (confirm "Continue?" #:reader (lambda args 0)))
+  (test-assert "confirmation convenience returns false for no"
+    (not (confirm "Continue?" #:reader (lambda args 1))))
+  (let ((result
+         (confirm/result
+          "Continue?"
+          #:reader (lambda args '(reader-result timed-out #f))
+          #:recommended 'no #:auto-resolve? #t)))
+    (test-eq "confirmation can safely resolve a recommended timeout"
+      'answered (question-result-status result))
+    (test-equal "recommended confirmation timeout retains an explicit denial"
+      '((confirmation . no)) (question-result-answers result)))
+  (test-error "confirmation rejects an invalid recommendation" #t
+    (confirm/result "Continue?" #:reader (lambda args 0)
+                    #:recommended 'maybe))
   (test-end "graphical structured prompt adapter")
   (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1)))

@@ -6,6 +6,8 @@
   #:use-module (srfi srfi-13)
   #:export (ask-questions
             ask-questions/result
+            confirm
+            confirm/result
             question-result?
             question-result-status
             question-result-answers))
@@ -187,3 +189,35 @@ headless verification."
   (let ((result (apply ask-questions/result questions arguments)))
     (and (eq? (question-result-status result) 'answered)
          (question-result-answers result))))
+
+(define* (confirm/result prompt
+                         #:key (reader graphical-reader) (timeout #f)
+                         (clock monotonic-seconds) (auto-resolve? #f)
+                         (recommended #f)
+                         (yes-label "Yes") (no-label "No")
+                         (yes-description #f) (no-description #f))
+  "Ask a yes/no question and return a structured termination result.
+On success, the result answers are `((confirmation . yes))' or
+`((confirmation . no))'.  RECOMMENDED may be `yes', `no', or #f."
+  (unless (memq recommended '(#f yes no))
+    (error "confirmation recommendation must be yes, no, or #f" recommended))
+  (ask-questions/result
+   (list
+    (make-single-question
+     'confirmation prompt
+     (list (make-question-option
+            'yes yes-label #:description yes-description
+            #:recommended? (eq? recommended 'yes))
+           (make-question-option
+            'no no-label #:description no-description
+            #:recommended? (eq? recommended 'no)))))
+   #:reader reader #:timeout timeout #:clock clock
+   #:auto-resolve? auto-resolve?))
+
+(define (confirm prompt . arguments)
+  "Ask a yes/no question, returning #t only when Yes is selected.
+Use `confirm/result' when No must remain distinct from termination."
+  (let ((result (apply confirm/result prompt arguments)))
+    (and (eq? (question-result-status result) 'answered)
+         (eq? (assq-ref (question-result-answers result) 'confirmation)
+              'yes))))

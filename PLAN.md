@@ -96,9 +96,8 @@ public API changes.
   Timeout may optionally resolve unanswered questions from their unique
   recommended choices when the caller explicitly enables it; supplied answers
   are retained, and a missing recommendation leaves the outcome timed out.
-- Treat the following as essential readiness gates rather than optional polish:
-  - add a simple confirmation convenience API on top of the same structured
-    result and failure semantics.
+  The ~confirm/result~ convenience API builds on those same structured result
+  and failure semantics, while ~confirm~ provides a compact boolean wrapper.
 - Add a generic command boundary for non-Scheme callers. It must accept
   structured JSON questions on stdin, emit only structured answers/outcomes on
   stdout, reserve stderr for diagnostics, and never pass prompt contents
@@ -145,7 +144,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 257 passing tests; no
+- Unit-suite status is documented from the current 264 passing tests; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline

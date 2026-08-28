@@ -27,6 +27,9 @@ Call ~ask-questions/result~ when the caller must distinguish ~answered~,
 The ~ask-questions~ compatibility wrapper continues to return the answer alist
 or ~#f~.  ~#:auto-resolve? #t~ makes timeout use recommended choices for any
 unanswered pages; it succeeds only when every such page has a recommendation.
+For the common two-choice case, ~confirm/result~ uses the same outcomes and
+returns an explicit ~yes~ or ~no~ answer; ~confirm~ is the compact boolean
+wrapper for callers that do not need to distinguish No from termination.
 
 ** Feature comparison and direction
 
@@ -60,7 +63,7 @@ boundary rather than an implementation gap.
 | Multiple completed values in one input | multi-selection | ~completing-read-multiple~ | question batch | missing | Wishlist |
 | Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | Available through ~#:message~ |
 | Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline and expose distinct termination outcomes; compatibility calls return ~#f~ |
-| Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | partial | Wishlist: promote existing primitives into a convenience API |
+| Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | supported | ~confirm/result~ preserves structured outcomes; ~confirm~ is the boolean convenience wrapper |
 | Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
 | Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids are independent of labels; recommended or retained answers set the initial highlight |
 | Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | supported | Opt-in per question; returned as a tagged answer distinct from option ids |
