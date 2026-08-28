@@ -90,13 +90,12 @@ public API changes.
   filtering disabled, navigation controls outside the option-id namespace,
   recommended or retained initial selection, opt-in free-form Other answers
   tagged distinctly from option ids, one monotonic deadline shared by every
-  page and Other prompt, id-to-answer results, and cancellation.
+  page and Other prompt, id-to-answer results, and structured outcomes for
+  answered, user-cancelled, timed-out, window-closed, and graphical-failure
+  termination. The compatibility wrappers still return an answer or `#f`.
 - Treat the following as essential readiness gates rather than optional polish:
   - support optional automatic resolution explicitly configured by the caller;
     otherwise expiration must report a timeout;
-  - expose structured outcomes that distinguish answered, user-cancelled,
-    timed-out, window-closed, and graphical-failure cases, while preserving a
-    compatibility wrapper that returns the current answer alist or `#f`;
   - add a simple confirmation convenience API on top of the same structured
     result and failure semantics.
 - Add a generic command boundary for non-Scheme callers. It must accept
@@ -145,7 +144,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 242 passing tests; no
+- Unit-suite status is documented from the current 253 passing tests; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline

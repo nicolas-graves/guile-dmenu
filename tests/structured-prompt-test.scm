@@ -42,6 +42,26 @@
   (test-eqv "graphical cancellation stays distinct" #f
     (ask-questions (list first) #:reader (lambda args #f)))
 
+  (let ((result (ask-questions/result
+                 (list first) #:reader (lambda args 1))))
+    (test-eq "structured success reports answered"
+      'answered (question-result-status result))
+    (test-equal "structured success retains answers"
+      '((mode . fast)) (question-result-answers result)))
+
+  (for-each
+   (lambda (status)
+     (let ((result
+            (ask-questions/result
+             (list first)
+             #:reader (lambda args (list 'reader-result status #f)))))
+       (test-eq (string-append "structured outcome reports "
+                               (symbol->string status))
+         status (question-result-status result))
+       (test-eqv "terminated outcome has no answers"
+         #f (question-result-answers result))))
+   '(cancelled timed-out window-closed graphical-failure))
+
   (let ((replies '(0 2 0 1))
         (initial-indices '()))
     (define* (back-reader prompt choices
@@ -139,6 +159,17 @@
                      #:timeout 5 #:clock clock))
     (test-equal "expired batch does not invoke the reader again"
       1 reader-calls))
+
+  (let ((times '(0 6)))
+    (define (clock)
+      (let ((value (car times)))
+        (set! times (cdr times))
+        value))
+    (let ((result (ask-questions/result
+                   (list first) #:reader (lambda args 0)
+                   #:timeout 5 #:clock clock)))
+      (test-eq "deadline exhaustion is reported as timeout"
+        'timed-out (question-result-status result))))
 
   (test-error "zero batch timeout is rejected" #t
     (ask-questions (list first) #:reader (lambda args #f) #:timeout 0))

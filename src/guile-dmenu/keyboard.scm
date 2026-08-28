@@ -194,7 +194,7 @@
        ;; ESC/Ctrl+g/c - Exit program
        ((or (= keysym XKB_KEY_Escape)
             (and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g))))
-        (put-message exit-channel 1))
+        (put-message exit-channel '(cancelled)))
 
        ;; Enter - Select current option
        ((= keysym XKB_KEY_Return)

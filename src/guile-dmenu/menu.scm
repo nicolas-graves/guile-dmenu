@@ -13,7 +13,13 @@
   #:use-module (fibers operations)
   #:use-module (fibers io-wakeup)
   #:use-module (fibers timers)
-  #:export (completing-read menu-width menu-padding menu-max-options)
+  #:use-module (srfi srfi-9)
+  #:export (completing-read
+            completing-read/result
+            completing-read-result?
+            completing-read-result-status
+            completing-read-result-value
+            menu-width menu-padding menu-max-options)
   #:re-export (make-completion-history
                completion-history?
                completion-history-entries
@@ -24,6 +30,15 @@
 (define menu-width (make-parameter 800))
 (define menu-padding (make-parameter 4))
 (define menu-max-options (make-parameter #f))
+
+(define-record-type <completing-read-result>
+  (make-completing-read-result status value)
+  completing-read-result?
+  (status completing-read-result-status)
+  (value completing-read-result-value))
+
+(define (answered value) (make-completing-read-result 'answered value))
+(define (terminated status) (make-completing-read-result status #f))
 
 (define (draw-state prompt message-lines input-enabled? conn cache state maximum)
   (let ((surface (wayland-connection-surface conn))
@@ -45,7 +60,7 @@
           (wl-surface-damage surface 0 0 (menu-width) 10000)
           (wl-surface-commit surface))))))
 
-(define* (completing-read prompt collection
+(define* (completing-read/result prompt collection
                           #:optional (predicate #f) (require-match #f)
                           (initial-input "") (history #f) (default #f)
                           (inherit-input-method #f)
@@ -54,16 +69,15 @@
                           (selection-mode 'text)
                           (initial-selected-index 0)
                           (completion-style 'substring))
-  "Display COLLECTION and submit text or the highlighted menu selection.
+  "Display COLLECTION and return a structured termination result.
 INITIAL-INPUT may be a string or (STRING . ZERO-BASED-POSITION).
 DEFAULT may be a string or list of strings.  Empty input returns its first
 value.  INHERIT-INPUT-METHOD enables `completion-input-transformer' for typed
 input.  HISTORY may be a mutable completion history, a positioned history
 pair, #f, or #t to disable recording.
 SELECTION-MODE may be `text' (the default), `menu' to return the highlighted
-string, or `menu-index' to return its zero-based displayed position.  Return
-#f on cancellation.  INITIAL-SELECTED-INDEX controls the initially highlighted
-displayed candidate."
+string, or `menu-index' to return its zero-based displayed position.
+INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
   (unless (memq selection-mode '(text menu menu-index))
     (error "unsupported selection mode" selection-mode))
   ;; Resolve the style before opening a Wayland connection so an invalid
@@ -114,7 +128,9 @@ displayed candidate."
               (spawn-fiber (lambda () (put-message events 'redraw))) #t)
             (lambda (data toplevel width height states)
               (unless (zero? width) (menu-width width)) #t)
-            (lambda args (spawn-fiber (lambda () (put-message result #f))) #t))
+            (lambda args
+              (spawn-fiber (lambda () (put-message result '(window-closed))))
+              #t))
            ;; Send the initial empty surface commit before waiting for the
            ;; compositor's configure event.  Redrawing before configure is a
            ;; protocol error, but waiting without flushing deadlocks startup.
@@ -128,7 +144,7 @@ displayed candidate."
                 (let prepare ()
                   (when (negative? (wl-display-prepare-read display))
                     (when (negative? (wl-display-dispatch-pending display))
-                      (put-message result #f))
+                      (put-message result '(graphical-failure)))
                     (prepare)))
                 (set! read-prepared? #t)
                 (wl-display-flush display)
@@ -145,7 +161,7 @@ displayed candidate."
                     ('wayland (set! read-prepared? #f)
                               (if (or (negative? (wl-display-read-events display))
                                       (negative? (wl-display-dispatch-pending display)))
-                                  (put-message result #f)
+                                  (put-message result '(graphical-failure))
                                   (loop s)))
                     (_
                      (match (dispatch-completing-read-event
@@ -155,7 +171,7 @@ displayed candidate."
                              #:require-match require-match
                              #:style completion-style
                              #:input-enabled? input-enabled?)
-                       (('selected value) (put-message result value))
+                       (('selected value) (put-message result `(answered ,value)))
                        (('state-update n) (redraw n) (loop n))
                        (_ (loop s)))))))))
            (let ((answer
@@ -163,12 +179,25 @@ displayed candidate."
                    (if timeout
                        (choice-operation
                         (get-operation result)
-                        (wrap-operation (sleep-operation timeout) (lambda () #f)))
+                        (wrap-operation (sleep-operation timeout)
+                                        (lambda () '(timed-out))))
                        (get-operation result)))))
              (when read-prepared?
                (wl-display-cancel-read display)
                (set! read-prepared? #f))
              (wl-display-disconnect display)
-             answer))))
+             (match answer
+               (('answered value) (answered value))
+               (('cancelled) (terminated 'cancelled))
+               (('timed-out) (terminated 'timed-out))
+               (('window-closed) (terminated 'window-closed))
+               (('graphical-failure) (terminated 'graphical-failure))
+               (_ (terminated 'graphical-failure)))))))
       #:parallelism 1
       #:drain? #f))))
+
+(define (completing-read . arguments)
+  "Compatibility wrapper returning the answer, or #f on termination."
+  (let ((result (apply completing-read/result arguments)))
+    (and (eq? (completing-read-result-status result) 'answered)
+         (completing-read-result-value result))))

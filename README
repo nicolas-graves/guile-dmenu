@@ -22,6 +22,11 @@ For multiple questions, each page opens through the ordinary Wayland
 ~completing-read~ path; Back preserves earlier answers and cancellation remains
 distinct from choosing a negative option.
 
+Call ~ask-questions/result~ when the caller must distinguish ~answered~,
+~cancelled~, ~timed-out~, ~window-closed~, and ~graphical-failure~ outcomes.
+The ~ask-questions~ compatibility wrapper continues to return the answer alist
+or ~#f~.
+
 ** Feature comparison and direction
 
 The table compares the three active product inspirations with the current
@@ -53,12 +58,12 @@ boundary rather than an implementation gap.
 | Completion help and candidate cycling | visible/paged menu | yes | visible choices | missing | Wishlist for the rich engine |
 | Multiple completed values in one input | multi-selection | ~completing-read-multiple~ | question batch | missing | Wishlist |
 | Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | Available through ~#:message~ |
-| Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline; cancellation, closure, and timeout return ~#f~ |
+| Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline and expose distinct termination outcomes; compatibility calls return ~#f~ |
 | Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | partial | Wishlist: promote existing primitives into a convenience API |
 | Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
 | Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids are independent of labels; recommended or retained answers set the initial highlight |
 | Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | supported | Opt-in per question; returned as a tagged answer distinct from option ids |
-| Distinguish denial, rejection, cancellation, and failure | exit/result conventions | return/quit conventions | yes | partial | Wishlist: explicit structured results; approval hook is partial |
+| Distinguish denial, rejection, cancellation, and failure | exit/result conventions | return/quit conventions | yes | partial | Structured prompt outcomes are explicit; approval-hook migration remains wishlist |
 
 Guile readline remains a comparison reference, not a fourth compatibility
 target.  Guile-dmenu already overlaps with its basic editing, completion,
