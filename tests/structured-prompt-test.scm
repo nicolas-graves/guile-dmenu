@@ -19,7 +19,7 @@
   (define calls '())
   (define* (reader prompt choices
                    #:key selection-mode input-enabled? initial-selected-index
-                   message timeout option-details comment-on-tab?)
+                   message timeout option-details comment-on-tab? escape-action)
     (set! calls
           (append calls
                   (list (list prompt choices selection-mode input-enabled?
@@ -53,7 +53,7 @@
      #:reader (lambda* (prompt choices
                         #:key selection-mode input-enabled?
                         initial-selected-index message timeout option-details
-                        comment-on-tab?)
+                        comment-on-tab? escape-action)
                 (set! captured-message message)
                 0))
     (test-assert "adapter exposes caller context in the graphical message"
@@ -75,6 +75,13 @@
          (let ((reply (car replies)))
            (set! replies (cdr replies))
            reply)))))
+
+  (test-equal "inline TAB comment attaches choice and text in one result"
+    '((mode choice safe comment "Check permissions before proceeding"))
+    (ask-questions
+     (list first)
+     #:reader
+     (lambda args '(comment 0 "Check permissions before proceeding"))))
 
   (let ((replies '((comment 0) (reader-result cancelled #f) 0))
         (initial-indices '()))
@@ -115,12 +122,12 @@
          #f (question-result-answers result))))
    '(cancelled timed-out window-closed graphical-failure))
 
-  (let ((replies '(0 2 0 1))
+  (let ((replies '(0 back 0 1))
         (initial-indices '()))
     (define* (back-reader prompt choices
                           #:key selection-mode input-enabled?
                           initial-selected-index message timeout option-details
-                          comment-on-tab?)
+                          comment-on-tab? escape-action)
       (set! initial-indices
             (append initial-indices (list initial-selected-index)))
       (let ((answer (car replies)))
@@ -142,7 +149,7 @@
          (index-reader
           (lambda* (prompt choices
                     #:key selection-mode input-enabled? initial-selected-index
-                    message timeout option-details comment-on-tab?)
+                    message timeout option-details comment-on-tab? escape-action)
             (let ((answer (car answers)))
               (set! answers (cdr answers))
               answer))))
@@ -166,7 +173,7 @@
                     #:optional predicate require-match
                     #:key selection-mode input-enabled?
                     initial-selected-index message timeout option-details
-                    comment-on-tab?)
+                    comment-on-tab? escape-action)
             (set! modes (append modes (list selection-mode)))
             (let ((answer (car replies)))
               (set! replies (cdr replies))
@@ -203,7 +210,7 @@
     (define* (timed-reader prompt choices
                            #:key selection-mode input-enabled?
                            initial-selected-index message timeout option-details
-                           comment-on-tab?)
+                           comment-on-tab? escape-action)
       (set! timeouts (append timeouts (list timeout)))
       (let ((answer (car replies)))
         (set! replies (cdr replies))
@@ -224,7 +231,7 @@
     (define* (expiring-reader prompt choices
                               #:key selection-mode input-enabled?
                               initial-selected-index message timeout option-details
-                              comment-on-tab?)
+                              comment-on-tab? escape-action)
       (set! reader-calls (+ reader-calls 1))
       0)
     (test-eqv "deadline expiration cancels before opening another page" #f

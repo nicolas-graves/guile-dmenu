@@ -173,7 +173,8 @@
       #t)))
 
 ;; Function to build the key handler for a session
-(define (make-key-decoder session app-channel exit-channel)
+(define* (make-key-decoder session app-channel exit-channel
+                           #:key (cancel-as-event? #f))
   (lambda (key)
     (let* ((xkb-key (+ 8 key))
            (xkb-state (keymap-state-xkb-state (keyboard-session-keymap-state session)))
@@ -193,7 +194,8 @@
        ;; ESC/Ctrl+g/c - Exit program
        ((or (= keysym XKB_KEY_Escape)
             (and ctrl-pressed (memq keysym (list XKB_KEY_c XKB_KEY_g))))
-        (put-message exit-channel '(cancelled)))
+        (put-message (if cancel-as-event? app-channel exit-channel)
+                     (if cancel-as-event? 'cancel '(cancelled))))
 
        ;; Enter - Select current option
        ((= keysym XKB_KEY_Return)

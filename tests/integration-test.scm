@@ -144,13 +144,13 @@
                           (('window-configured 3 _ _) #t)
                           (_ #f))
                         (read-river-manager-events session))))
-    ;; Choose Fast; go Back from page two; change to Safe; then choose Other
-    ;; and enter free-form text.  Pauses span the separate Wayland sessions
-    ;; opened for each page and for the text reader.
+    ;; Choose Fast; use Escape as Back from page two; change to Safe; then
+    ;; choose Other and enter free-form text.  Pauses span the separate Wayland
+    ;; sessions opened for each page and for the text reader.
     (river-session-wtype
      session
      "-s" "100" "-k" "Down" "-k" "Return"
-     "-s" "400" "-k" "Down" "-k" "Down" "-k" "Down" "-k" "Return"
+     "-s" "400" "-k" "Escape"
      "-s" "400" "-k" "Up" "-k" "Return"
      "-s" "400" "-k" "Down" "-k" "Down" "-k" "Return"
      "-s" "400" "custom detail" "-k" "Return")
@@ -177,8 +177,8 @@
     (eventually "comment question window was configured"
                 (lambda ()
                   (configured-event (read-river-manager-events session))))
-    ;; Ask to qualify the highlighted choice, then type the attached comment
-    ;; in the fresh editable Wayland session.
+    ;; Ask to qualify the highlighted choice, then type in the inline editor
+    ;; while the same Wayland surface keeps the selected choice visible.
     (river-session-wtype
      session
      "-s" "100" "-k" "Tab"

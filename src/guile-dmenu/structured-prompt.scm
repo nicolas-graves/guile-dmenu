@@ -12,7 +12,6 @@
             question-result-status
             question-result-answers))
 
-(define %back-label "← Back")
 (define %other-label "Other…")
 
 (define-record-type <question-result>
@@ -63,8 +62,9 @@
 (define (question-message question page total context)
   (string-join
    (append
-    (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Tab add comment  ·  Enter confirm  ·  Esc cancel"
-                  (+ page 1) total))
+    (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Tab add comment  ·  Enter confirm  ·  ~a"
+                  (+ page 1) total
+                  (if (positive? page) "← Esc back" "Esc cancel")))
     (if context (list context) '()))
    "\n"))
 
@@ -151,14 +151,11 @@ headless verification."
            (options (single-question-options question))
            (allow-other? (single-question-allow-other? question))
            (other-index (and allow-other? (length options)))
-           (back-index (+ (length options) (if allow-other? 1 0)))
            (choices (append (map option-display options)
-                            (if allow-other? (list %other-label) '())
-                            (if (positive? page) (list %back-label) '())))
+                            (if allow-other? (list %other-label) '())))
            (option-details
             (append (map question-option-description options)
-                    (if allow-other? (list #f) '())
-                    (if (positive? page) (list #f) '())))
+                    (if allow-other? (list #f) '())))
            (message (question-message
                      question page (length questions) context))
            (remaining (remaining-time deadline clock))
@@ -169,6 +166,7 @@ headless verification."
                          #:input-enabled? #f
                          #:option-details option-details
                          #:comment-on-tab? #t
+                         #:escape-action (if (positive? page) 'back 'cancel)
                          #:initial-selected-index
                          (initial-choice-index state question options)
                          #:message message
@@ -185,6 +183,20 @@ headless verification."
          (cond
        ((eq? status 'timed-out) (timeout-result state auto-resolve?))
        ((not (eq? status 'answered)) (make-question-result status #f))
+       ((and (list? answer) (= (length answer) 3)
+             (eq? (car answer) 'comment))
+        (let ((index (cadr answer)) (text (caddr answer)))
+          (unless (and (integer? index) (<= 0 index) (< index (length options)))
+            (error "graphical question returned an invalid comment index" index))
+          (let* ((option (list-ref options index))
+                 (answered (question-state-answer-comment
+                            state (question-option-id option) text))
+                 (next (advance-or-complete answered page (length questions))))
+            (if (question-state? next)
+                (loop next)
+                (make-question-result 'answered next)))))
+       ;; Compatibility with injected readers using the original two-stage
+       ;; comment protocol.
        ((and (pair? answer) (eq? (car answer) 'comment))
         (let ((index (cadr answer)))
           (unless (and (integer? index) (<= 0 index) (< index (length options)))
@@ -213,11 +225,11 @@ headless verification."
                     (if (question-state? next)
                         (loop next)
                         (make-question-result 'answered next)))))))))))
+       ((and (positive? page) (eq? answer 'back))
+        (loop (question-state-back state)))
        ((not (and (integer? answer) (exact? answer)
                   (<= 0 answer) (< answer (length choices))))
         (error "graphical question returned an invalid choice index" answer))
-       ((and (positive? page) (= answer back-index))
-        (loop (question-state-back state)))
        ((and allow-other? (= answer other-index))
         (call-with-values
             (lambda ()

@@ -51,11 +51,16 @@
   (completing-read-result-value result))
 
 (define (draw-state prompt message-lines option-details details-visible?
-                    input-enabled? conn cache state maximum)
+                    input-enabled? conn cache state maximum
+                    comment-state comment-index)
   (let ((surface (wayland-connection-surface conn))
+        (commenting? (and comment-state #t))
         (state-message-lines
          (append
           message-lines
+          (if comment-state
+              (list "Comment on the selected choice  ·  Enter attach  ·  Esc back")
+              '())
           (if (and details-visible? (pair? option-details))
               (let* ((index (completing-read-state-selected-index state))
                      (detail (and (< index (length option-details))
@@ -69,14 +74,18 @@
               '("Confirm submission with RET")
               '()))))
     (when surface
-      (let ((buffer (draw-menu (menu-width) 0 (menu-padding) cache prompt
-                               (completing-read-state-input-text state)
+      (let ((buffer (draw-menu (menu-width) 0 (menu-padding) cache
+                               (if commenting? "Comment ›" prompt)
+                               (if commenting?
+                                   (completing-read-state-input-text comment-state)
+                                   (completing-read-state-input-text state))
                                (completing-read-state-selected-index state)
                                (completing-read-state-filtered-options state)
                                maximum #:message-lines state-message-lines
                                #:cursor-position
-                               (completing-read-state-cursor-position state)
-                               #:input-enabled? input-enabled?)))
+                               (completing-read-state-cursor-position
+                                (if commenting? comment-state state))
+                               #:input-enabled? (or commenting? input-enabled?))))
         (when buffer
           (wl-surface-attach surface buffer 0 0)
           (wl-surface-damage surface 0 0 (menu-width) 10000)
@@ -89,6 +98,7 @@
                           #:key (message #f) (input-enabled? #t)
                           (option-details #f)
                           (comment-on-tab? #f)
+                          (escape-action 'cancel)
                           (timeout #f) (max-message-lines 12)
                           (selection-mode 'text)
                           (initial-selected-index 0)
@@ -101,11 +111,14 @@ input.  HISTORY may be a mutable completion history, a positioned history
 pair, #f, or #t to disable recording.
 SELECTION-MODE may be `text' (the default), `menu' to return the highlighted
 string, or `menu-index' to return its zero-based displayed position.
-INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
+INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate.
+ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
   (unless (memq selection-mode '(text menu menu-index))
     (error "unsupported selection mode" selection-mode))
   (unless (boolean? comment-on-tab?)
     (error "comment-on-tab marker must be boolean" comment-on-tab?))
+  (unless (memq escape-action '(cancel back))
+    (error "escape action must be cancel or back" escape-action))
   ;; Resolve the style before opening a Wayland connection so an invalid
   ;; option fails deterministically even when TAB is never pressed.
   (lookup-completion-style completion-style)
@@ -139,7 +152,8 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
              (events (make-channel))
              (result (make-channel)))
          (set-keyboard-session-key-handler!
-          session (make-key-decoder session events result))
+          session (make-key-decoder session events result
+                                    #:cancel-as-event? #t))
          (let* ((conn (connect-wayland (make-seat-listener session)))
                 (display (wayland-connection-display conn))
                 (port (fdes->inport (wl-display-get-fd display)))
@@ -153,9 +167,10 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                         #:request-redraw
                         (lambda () (spawn-fiber (lambda ()
                                                   (put-message events 'redraw)))))))
-           (define (redraw s)
+           (define (redraw s comment-state comment-index)
              (draw-state prompt message-lines option-details details-visible?
-                         input-enabled? conn cache s maximum)
+                         input-enabled? conn cache s maximum
+                         comment-state comment-index)
              (wl-display-flush display))
            (create-window
             conn "dmenu" "wl-dmenu" (menu-width)
@@ -173,7 +188,7 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
            (wl-display-flush display)
            (spawn-fiber
             (lambda ()
-              (let loop ((s state))
+              (let loop ((s state) (comment-state #f) (comment-index #f))
                 ;; Drain callbacks already queued by libwayland, then prepare
                 ;; exactly one nonblocking socket read.  If another fiber's
                 ;; event wins the race below, cancel that prepared read.
@@ -193,24 +208,32 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                     (wl-display-cancel-read display)
                     (set! read-prepared? #f))
                   (match event
-                    ((or 'redraw 'surface-configure) (redraw s) (loop s))
+                    ((or 'redraw 'surface-configure)
+                     (redraw s comment-state comment-index)
+                     (loop s comment-state comment-index))
                     ('wayland (set! read-prepared? #f)
                               (if (or (negative? (wl-display-read-events display))
                                       (negative? (wl-display-dispatch-pending display)))
                                   (put-message result '(graphical-failure))
-                                  (loop s)))
-                    ('complete
-                     (if (and (not input-enabled?) comment-on-tab?)
-                         (put-message
-                          result
-                          `(answered
-                            (comment
-                             ,(completing-read-state-selected-index s))))
-                         (if (and (not input-enabled?) option-details)
+                                  (loop s comment-state comment-index)))
+                    ('cancel
+                     (if comment-state
                          (begin
-                           (set! details-visible? (not details-visible?))
-                           (redraw s)
-                           (loop s))
+                           (redraw s #f #f)
+                           (loop s #f #f))
+                         (put-message result
+                                      (if (eq? escape-action 'back)
+                                          '(answered back)
+                                          '(cancelled)))))
+                    ('select
+                     (if comment-state
+                         (let ((text (completing-read-state-input-text
+                                      comment-state)))
+                           (if (zero? (string-length text))
+                               (loop s comment-state comment-index)
+                               (put-message result
+                                            `(answered
+                                              (comment ,comment-index ,text)))))
                          (match (dispatch-completing-read-event
                                  s event options collection
                                  #:predicate predicate
@@ -218,19 +241,50 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                                  #:require-match require-match
                                  #:style completion-style
                                  #:input-enabled? input-enabled?)
-                           (('state-update n) (redraw n) (loop n))
-                           (_ (loop s))))))
+                           (('selected value)
+                            (put-message result `(answered ,value)))
+                           (('state-update n) (redraw n #f #f) (loop n #f #f))
+                           (_ (loop s #f #f)))))
+                    ('complete
+                     (cond
+                      (comment-state
+                       (loop s comment-state comment-index))
+                      ((and (not input-enabled?) comment-on-tab?)
+                         (let ((index (completing-read-state-selected-index s))
+                               (editor (initial-state '() "" #f #f #f 0)))
+                           (redraw s editor index)
+                           (loop s editor index)))
+                      ((and (not input-enabled?) option-details)
+                       (set! details-visible? (not details-visible?))
+                       (redraw s #f #f)
+                       (loop s #f #f))
+                      (else
+                       (match (dispatch-completing-read-event
+                               s event options collection
+                               #:predicate predicate
+                               #:selection-mode selection-mode
+                               #:require-match require-match
+                               #:style completion-style
+                               #:input-enabled? input-enabled?)
+                         (('state-update n) (redraw n #f #f) (loop n #f #f))
+                         (_ (loop s #f #f))))))
                     (_
                      (match (dispatch-completing-read-event
-                             s event options collection
+                             (or comment-state s) event
+                             (if comment-state '() options)
+                             (if comment-state '() collection)
                              #:predicate predicate
-                             #:selection-mode selection-mode
-                             #:require-match require-match
+                             #:selection-mode (if comment-state 'text selection-mode)
+                             #:require-match (if comment-state #f require-match)
                              #:style completion-style
-                             #:input-enabled? input-enabled?)
+                             #:input-enabled? (or comment-state input-enabled?))
                        (('selected value) (put-message result `(answered ,value)))
-                       (('state-update n) (redraw n) (loop n))
-                       (_ (loop s)))))))))
+                       (('state-update n)
+                        (if comment-state
+                            (begin (redraw s n comment-index)
+                                   (loop s n comment-index))
+                            (begin (redraw n #f #f) (loop n #f #f))))
+                       (_ (loop s comment-state comment-index)))))))))
            (let ((answer
                   (perform-operation
                    (if timeout

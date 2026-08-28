@@ -19,8 +19,9 @@ Structured questions can now drive real graphical sessions through
 #+end_src
 
 For multiple questions, each page opens through the ordinary Wayland
-~completing-read~ path; Back preserves earlier answers and cancellation remains
-distinct from choosing a negative option.
+~completing-read~ path.  Escape on a later page acts as Back and preserves
+earlier answers; the compact arrow hint replaces a selectable navigation row.
+Cancellation remains distinct from choosing a negative option.
 
 Call ~ask-questions/result~ when the caller must distinguish ~answered~,
 ~cancelled~, ~timed-out~, ~window-closed~, and ~graphical-failure~ outcomes.
@@ -82,8 +83,8 @@ boundary rather than an implementation gap.
 | Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline and expose distinct termination outcomes; compatibility calls return ~#f~ |
 | Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | supported | ~confirm/result~ preserves structured outcomes; ~confirm~ is the boolean convenience wrapper |
 | Structured JSON command boundary | no | no | hook/tool transport | supported | One request on stdin and one outcome on stdout; diagnostics use stderr |
-| Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
-| Choice descriptions, comments, and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids remain separate from labels; Tab adds a free-form comment to the highlighted choice, while Esc returns to that choice; recommended or retained answers set the initial highlight |
+| Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Escape follows the compact back-arrow hint and retains answers without adding a selectable Back row |
+| Choice descriptions, comments, and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids remain separate from labels; Tab opens an inline comment editor beneath the still-visible highlighted choice, while Esc returns to that choice; recommended or retained answers set the initial highlight |
 | Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | supported | Opt-in per question; returned as a tagged answer distinct from option ids |
 | Distinguish denial, rejection, cancellation, and failure | exit/result conventions | return/quit conventions | yes | partial | Structured prompt outcomes are explicit; approval-hook migration remains wishlist |
 

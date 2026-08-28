@@ -85,8 +85,9 @@ public API changes.
   `PermissionRequest` integration.
 - Record the implemented foundation: validated question and option records,
   stable ids, one-to-three-question batches, two or three choices per question,
-  choice descriptions, Tab-triggered free-form comments attached to a selected
-  choice, recommended markers, retained answers, Back navigation,
+  choice descriptions, an inline Tab-triggered editor for free-form comments
+  attached to the still-visible selected choice, recommended markers, retained
+  answers, compact Escape/Back navigation without a selectable navigation row,
   graphical execution, collision-proof index-to-id selection with input
   filtering disabled, navigation controls outside the option-id namespace,
   recommended or retained initial selection, opt-in free-form Other answers
