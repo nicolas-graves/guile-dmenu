@@ -165,17 +165,25 @@ headless verification."
        ((and (positive? page) (= answer back-index))
         (loop (question-state-back state)))
        ((and allow-other? (= answer other-index))
-        (let ((text (read-other reader question message deadline clock)))
-          (if (not text)
-              (if (and deadline (<= (remaining-time deadline clock) 0))
-                  (timeout-result state auto-resolve?)
-                  (make-question-result 'cancelled #f))
+        (call-with-values
+            (lambda ()
+              (reader-result
+               (read-other reader question message deadline clock)))
+          (lambda (other-status text)
+            (cond
+             ((or (eq? other-status 'timed-out)
+                  (and deadline
+                       (<= (remaining-time deadline clock) 0)))
+              (timeout-result state auto-resolve?))
+             ((not (eq? other-status 'answered))
+              (make-question-result other-status #f))
+             (else
               (let ((answered (question-state-answer-other state text)))
                 (let ((next (advance-or-complete
                              answered page (length questions))))
                   (if (question-state? next)
                       (loop next)
-                      (make-question-result 'answered next)))))))
+                      (make-question-result 'answered next)))))))))
        (else
         (let* ((option (list-ref options answer))
                (selected (question-state-select

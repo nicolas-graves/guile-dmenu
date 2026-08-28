@@ -122,6 +122,22 @@
     (test-equal "Other switches from indexed choice to text entry"
       '(menu-index text) modes))
 
+  (let* ((question
+          (make-single-question
+           'details "Details?"
+           (list (make-question-option 'brief "Brief")
+                 (make-question-option 'full "Full"))
+           #:allow-other? #t))
+         (replies '(2 (reader-result answered "graphical details")))
+         (reader
+          (lambda args
+            (let ((answer (car replies)))
+              (set! replies (cdr replies))
+              answer))))
+    (test-equal "Other accepts the real graphical reader result"
+      '((details other . "graphical details"))
+      (ask-questions (list question) #:reader reader)))
+
   (let ((times '(10 11 13))
         (replies '(0 1))
         (timeouts '()))
