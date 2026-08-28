@@ -18,7 +18,18 @@
             single-question-state-selected-option
             single-question-select
             single-question-complete
-            single-question-cancel))
+            single-question-cancel
+            make-question-state
+            question-state?
+            question-state-questions
+            question-state-page
+            question-state-current-question
+            question-state-selected-option
+            question-state-select
+            question-state-back
+            question-state-next
+            question-state-complete
+            question-state-cancel))
 
 ;; This module deliberately has no dependency on the menu or Wayland modules.
 ;; Structured questions are opt-in state, not part of ordinary string-list
@@ -114,4 +125,100 @@
 (define (single-question-cancel state)
   (unless (single-question-state? state)
     (error "expected a single-question state" state))
+  #f)
+
+;; A question state owns all structured-question navigation state.  In
+;; particular, none of this state is shared with the raw string-list menu.
+(define-record-type <question-state>
+  (%make-question-state questions page answers)
+  question-state?
+  (questions question-state-questions)
+  (page question-state-page)
+  (answers question-state-answers))
+
+(define (duplicate-question-id questions)
+  (find (lambda (question)
+          (> (count (lambda (other)
+                      (equal? (single-question-id question)
+                              (single-question-id other)))
+                    questions)
+             1))
+        questions))
+
+(define (make-question-state questions)
+  (unless (and (list? questions) (every single-question? questions))
+    (error "questions must be a list of questions" questions))
+  (unless (memv (length questions) '(1 2 3))
+    (error "a question state requires one to three questions" questions))
+  (let ((duplicate (duplicate-question-id questions)))
+    (when duplicate
+      (error "question ids must be unique" (single-question-id duplicate))))
+  (%make-question-state questions 0 (make-list (length questions) #f)))
+
+(define (question-state-current-question state)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (list-ref (question-state-questions state) (question-state-page state)))
+
+(define (question-state-selected-option state)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (list-ref (question-state-answers state) (question-state-page state)))
+
+(define (replace-at items index value)
+  (let loop ((rest items) (position 0))
+    (cond ((null? rest) '())
+          ((= position index) (cons value (cdr rest)))
+          (else (cons (car rest) (loop (cdr rest) (+ position 1)))))))
+
+(define (question-state-select state option-id)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (let* ((question (question-state-current-question state))
+         (option (find (lambda (candidate)
+                         (equal? option-id (question-option-id candidate)))
+                       (single-question-options question))))
+    (unless option
+      (error "unknown question option id" option-id))
+    (%make-question-state
+     (question-state-questions state)
+     (question-state-page state)
+     (replace-at (question-state-answers state)
+                 (question-state-page state) option))))
+
+(define (question-state-back state)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (when (zero? (question-state-page state))
+    (error "already at the first question"))
+  (%make-question-state (question-state-questions state)
+                        (- (question-state-page state) 1)
+                        (question-state-answers state)))
+
+(define (question-state-next state)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (unless (question-state-selected-option state)
+    (error "cannot leave an unanswered question"
+           (single-question-id (question-state-current-question state))))
+  (when (= (+ (question-state-page state) 1)
+           (length (question-state-questions state)))
+    (error "already at the last question"))
+  (%make-question-state (question-state-questions state)
+                        (+ (question-state-page state) 1)
+                        (question-state-answers state)))
+
+(define (question-state-complete state)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (unless (every question-option? (question-state-answers state))
+    (error "cannot complete with unanswered questions"))
+  (map (lambda (question option)
+         (cons (single-question-id question) (question-option-id option)))
+       (question-state-questions state)
+       (question-state-answers state)))
+
+(define (question-state-cancel state)
+  (unless (question-state? state)
+    (error "expected a question state" state))
   #f)

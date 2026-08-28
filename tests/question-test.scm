@@ -62,5 +62,58 @@
 (test-error "an unanswered question cannot complete" #t
   (single-question-complete initial))
 
+(define format-question
+  (make-single-question 'format "Output format?"
+                        (list (make-question-option 'text "Text")
+                              (make-question-option 'json "JSON"))))
+(define publish-question
+  (make-single-question 'publish "Publish now?"
+                        (list (make-question-option 'yes "Yes")
+                              (make-question-option 'no "No"))))
+(define paged (make-question-state
+               (list question format-question publish-question)))
+
+(test-equal "batch starts on its first question" 'mode
+  (single-question-id (question-state-current-question paged)))
+(test-equal "batch accepts three questions" 3
+  (length (question-state-questions paged)))
+(test-assert "batch accepts one question"
+  (question-state? (make-question-state (list question))))
+(test-assert "batch accepts two questions"
+  (question-state? (make-question-state (list question format-question))))
+(test-error "empty batches are rejected" #t (make-question-state '()))
+(test-error "batches longer than three are rejected" #t
+  (make-question-state (list question format-question publish-question question)))
+(test-error "duplicate question ids are rejected" #t
+  (make-question-state (list question question)))
+
+(define page-one (question-state-select paged 'fast))
+(define page-two (question-state-next page-one))
+(define page-two-answered (question-state-select page-two 'json))
+(define back-on-one (question-state-back page-two-answered))
+(test-eq "Back retains the first answer" fast
+  (question-state-selected-option back-on-one))
+(define forward-on-two (question-state-next back-on-one))
+(test-equal "Next retains the later answer" 'json
+  (question-option-id (question-state-selected-option forward-on-two)))
+(define page-three
+  (question-state-next forward-on-two))
+(define complete-state (question-state-select page-three 'no))
+(test-equal "completion returns every id-to-answer pair"
+  '((mode . fast) (format . json) (publish . no))
+  (question-state-complete complete-state))
+(test-error "Next requires an answer" #t (question-state-next paged))
+(test-error "completion requires every answer" #t
+  (question-state-complete page-one))
+(test-eqv "cancellation returns #f on first page" #f
+  (question-state-cancel paged))
+(test-eqv "cancellation returns #f on middle page" #f
+  (question-state-cancel page-two))
+(test-eqv "cancellation returns #f on last page" #f
+  (question-state-cancel page-three))
+(test-error "Back rejects the first page" #t (question-state-back paged))
+(test-error "Next rejects the final page" #t
+  (question-state-next complete-state))
+
 (test-end "single-question state")
 (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1))
