@@ -60,8 +60,8 @@ Return QUESTIONS, TIMEOUT, and AUTO-RESOLVE? as three values."
     (list
      (cons 'id (car entry))
      (cons 'answer
-           (if (question-other-answer? answer)
-               (list (cons 'other (question-other-answer-text answer)))
+           (if (and (pair? answer) (eq? (car answer) 'other))
+               (list (cons 'other (cdr answer)))
                answer)))))
 
 (define (question-result->json result)
