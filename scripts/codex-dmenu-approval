@@ -1,6 +1,7 @@
 #!/usr/bin/env guile
 !#
-(use-modules (guile-dmenu approval) (json)
+(use-modules (guile-dmenu approval) (guile-dmenu question)
+             (guile-dmenu structured-prompt) (json)
              (ice-9 getopt-long) (ice-9 exceptions) (ice-9 format))
 
 (define default-timeout 120)
@@ -26,13 +27,26 @@
             ((>= (now) deadline) (close-port port) #f)
             (else (usleep 50000) (loop))))))
 (define (emit value) (scm->json value) (newline))
-(define (graphical-choice message remaining)
-  ((module-ref (resolve-interface '(guile-dmenu menu)) 'completing-read)
-   "Codex permission request"
-   '("Review in terminal" "Allow once" "Deny")
-   #:selection-mode 'menu
-   #:message message #:input-enabled? #f #:timeout remaining
-   #:max-message-lines 12))
+(define (mock-reader response)
+  (let ((index (cond ((equal? response "Review in terminal") 0)
+                     ((equal? response "Allow once") 1)
+                     ((equal? response "Deny") 2)
+                     (else #f))))
+    (lambda args index)))
+
+(define (graphical-choice message remaining mock)
+  (let* ((question
+          (make-single-question
+           'permission "Codex permission request"
+           (list (make-question-option 'review "Review in terminal")
+                 (make-question-option 'allow "Allow once")
+                 (make-question-option 'deny "Deny"))))
+         (arguments
+          (append (list (list question) #:timeout remaining)
+                  (if mock (list #:reader (mock-reader mock)) '())))
+         (result (apply ask-questions/result arguments)))
+    (and (eq? (question-result-status result) 'answered)
+         (assq-ref (question-result-answers result) 'permission))))
 
 (let* ((opts (getopt-long (command-line) '((timeout (value #t)))))
        (seconds (or (valid-timeout (option-ref opts 'timeout #f))
@@ -61,10 +75,8 @@
                     (let* (;; Tests can inject a stdin-safe mock without moving
                            ;; request contents into its argv or environment.
                            (mock (getenv "CODEX_DMENU_MOCK_RESPONSE"))
-                           (answer
-                            (or mock
-                                (graphical-choice (request-message request)
-                                                  remaining))))
-                      (cond ((equal? answer "Allow once") (emit (allow-result)))
-                            ((equal? answer "Deny") (emit (deny-result))))))))
+                           (answer (graphical-choice (request-message request)
+                                                     remaining mock)))
+                      (cond ((eq? answer 'allow) (emit (allow-result)))
+                            ((eq? answer 'deny) (emit (deny-result))))))))
               (lambda () (flock lock LOCK_UN) (close-port lock))))))))

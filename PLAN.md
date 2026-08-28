@@ -101,9 +101,9 @@ public API changes.
   The ~guile-dmenu-questions~ command provides the generic non-Scheme boundary:
   one structured JSON request on stdin, only the answer/outcome on stdout, and
   diagnostics on stderr, with no prompt contents in argv or environment.
-- Migrate `codex-dmenu-approval` to the structured prompt API so the real
-  Codex-facing consumer exercises the generic implementation without changing
-  its fail-safe empty-output fallback contract.
+- `codex-dmenu-approval` now uses the structured prompt API, so the real
+  Codex-facing consumer exercises stable option ids and structured outcomes
+  without changing its fail-safe empty-output fallback contract.
 - Do not claim transparent replacement of ordinary Codex questions until Codex
   exposes an integration point for redirecting them. The currently documented
   `PermissionRequest` hook covers approval requests only; this external product
@@ -143,7 +143,8 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 273 passing tests; no
+- Unit-suite status is documented from the current 273 passing Scheme tests
+  plus the approval command regression test; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline
