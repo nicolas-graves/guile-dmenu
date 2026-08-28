@@ -136,83 +136,24 @@ cancellation."
                   (unless (eq? event 'wayland)
                     (wl-display-cancel-read display)
                     (set! read-prepared? #f))
-                  ;; Every decoded key other than TAB and RET breaks TAB/RET
-                  ;; adjacency, even if its transition is a boundary no-op.
-                  (when (or (memq event '(next previous next-default
-                                          previous-default left right home end
-                                          backspace ctrl+backspace))
-                            (and (pair? event) (eq? (car event) 'input-char)))
-                    (set! s (clear-completion-immediacy s)))
                   (match event
-                    ('select
-                     (match (handle-submit
-                             s selection-mode
-                             #:collection collection
-                             #:predicate predicate
-                             #:require-match require-match
-                             #:style completion-style)
-                       (('selected value) (put-message result value))
-                       (('state-update n) (redraw n) (loop n))
-                       (_ (loop s))))
-                    ('next (match (handle-next s)
-                             (('state-update n) (redraw n) (loop n))
-                             (_ (loop s))))
-                    ('previous (match (handle-previous s)
-                                 (('state-update n) (redraw n) (loop n))
-                                 (_ (loop s))))
-                    ('next-default
-                     (if input-enabled?
-                         (match (handle-next-history s options)
-                           (('state-update n) (redraw n) (loop n))
-                           (_ (loop s)))
-                         (loop s)))
-                    ('previous-default
-                     (if input-enabled?
-                         (match (handle-previous-history s options)
-                           (('state-update n) (redraw n) (loop n))
-                           (_ (loop s)))
-                         (loop s)))
-                    ((and (or 'left 'right 'home 'end) key)
-                     (if input-enabled?
-                         (let ((transition
-                                ((case key
-                                   ((left) handle-left)
-                                   ((right) handle-right)
-                                   ((home) handle-home)
-                                   ((end) handle-end))
-                                 s)))
-                           (match transition
-                             (('state-update n) (redraw n) (loop n))
-                             (_ (loop s))))
-                         (loop s)))
-                    ((and (or 'backspace 'ctrl+backspace) key)
-                     (if input-enabled?
-                         (match (handle-backspace s options
-                                                  #:ctrl-pressed? (eq? key 'ctrl+backspace))
-                           (('state-update n) (redraw n) (loop n))
-                           (_ (loop s)))
-                         (loop s)))
-                    ('complete
-                     (if input-enabled?
-                         (match (handle-complete
-                                 s collection options predicate
-                                 #:style completion-style)
-                           (('state-update n) (redraw n) (loop n))
-                           (_ (loop s)))
-                         (loop s)))
-                    (('input-char char)
-                     (if input-enabled?
-                         (match (handle-input-char char s options)
-                           (('state-update n) (redraw n) (loop n))
-                           (_ (loop s)))
-                         (loop s)))
                     ((or 'redraw 'surface-configure) (redraw s) (loop s))
                     ('wayland (set! read-prepared? #f)
                               (if (or (negative? (wl-display-read-events display))
                                       (negative? (wl-display-dispatch-pending display)))
                                   (put-message result #f)
                                   (loop s)))
-                    (_ (loop s)))))))
+                    (_
+                     (match (dispatch-completing-read-event
+                             s event options collection
+                             #:predicate predicate
+                             #:selection-mode selection-mode
+                             #:require-match require-match
+                             #:style completion-style
+                             #:input-enabled? input-enabled?)
+                       (('selected value) (put-message result value))
+                       (('state-update n) (redraw n) (loop n))
+                       (_ (loop s)))))))))
            (let ((answer
                   (perform-operation
                    (if timeout

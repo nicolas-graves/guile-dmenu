@@ -142,22 +142,21 @@
                    #:collection require-match-options
                    #:require-match 'confirm-after-completion)))
 
-(let* ((completed (cadr (handle-complete
+(let* ((completed (cadr (dispatch-completing-read-event
                          (submit-state "literal")
-                         require-match-options require-match-options)))
-       ;; The event loop clears immediacy before dispatching every non-TAB/RET
-       ;; key, including this Right-at-end boundary no-op.
-       (after-key (clear-completion-immediacy completed))
-       (boundary-result (handle-right after-key)))
+                         'complete require-match-options require-match-options)))
+       (boundary-result
+        (dispatch-completing-read-event
+         completed 'right require-match-options require-match-options)))
   (test-equal "boundary no-op remains a no-change editing transition"
     'no-change (car boundary-result))
   (test-assert "a key between TAB and RET clears completion immediacy"
-    (not (completing-read-state-completion-invoked? after-key)))
+    (not (completing-read-state-completion-invoked? (cadr boundary-result))))
   (test-equal "RET after an intervening boundary key does not confirm"
     '(selected "literal")
-    (handle-submit (cadr boundary-result) 'text
-                   #:collection require-match-options
-                   #:require-match 'confirm-after-completion)))
+    (dispatch-completing-read-event
+     (cadr boundary-result) 'select require-match-options require-match-options
+     #:require-match 'confirm-after-completion)))
 
 (test-end "require-match submission")
 
@@ -273,16 +272,51 @@
 
 (test-begin "public initial collection input")
 
+(define (install-interface name exports)
+  (let ((module (define-module* name #:exports exports)))
+    (for-each (lambda (symbol)
+                (module-define! module symbol #f)
+                (module-export! module (list symbol)))
+              exports)))
+
+;; The public procedure reaches programmed collections before touching these
+;; compositor interfaces.  Stubs let this production-path regression load the
+;; real menu module even when guile-wayland is not installed in the unit-test
+;; environment.
+(install-interface '(guile-dmenu wayland)
+                   '(wayland-connection-surface wayland-connection-display
+                     wayland-connection-shm connect-wayland create-window
+                     wl-display-cancel-read wl-display-dispatch-pending
+                     wl-display-prepare-read))
+(install-interface '(guile-dmenu graphics)
+                   '(draw-menu make-menu-buffer-cache
+                     destroy-menu-buffer-cache! wrap-message-lines))
+(install-interface '(guile-dmenu keyboard)
+                   '(make-keyboard-session set-keyboard-session-key-handler!
+                     make-key-decoder make-seat-listener))
+(install-interface '(wayland client display)
+                   '(wl-display-get-fd wl-display-flush wl-display-read-events
+                     wl-display-disconnect))
+(install-interface '(wayland client protocol wayland)
+                   '(wl-surface-attach wl-surface-damage wl-surface-commit))
+(install-interface '(wayland client protocol xdg-shell)
+                   '(xdg-surface-ack-configure))
+
 (let ((received #f))
-  (call-with-values
-      (lambda () (normalize-initial-input '("seed text" . 4)))
-    (lambda (text position)
-      (normalize-collection
-       (lambda (input predicate action)
-         (set! received input)
-         '("seed text"))
-       #f text)))
-  (test-equal "normalized initial text is sent to a programmed collection"
+  (let ((completing-read
+         (module-ref (resolve-interface '(guile-dmenu menu))
+                     'completing-read)))
+    (catch 'initial-input-observed
+      (lambda ()
+        (completing-read
+         "Prompt"
+         (lambda (input predicate action)
+           (set! received input)
+           ;; Abort before completing-read attempts a Wayland connection.
+           (throw 'initial-input-observed))
+         #f #f '("seed text" . 4)))
+      (lambda args #t)))
+  (test-equal "completing-read sends normalized initial text to a programmed table"
     "seed text" received))
 
 (test-end "public initial collection input")

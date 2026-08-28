@@ -1,6 +1,7 @@
 (define-module (guile-dmenu filter)
   #:use-module (guile-dmenu completion)
   #:use-module (ice-9 format)
+  #:use-module (ice-9 match)
   #:use-module (ice-9 regex)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
@@ -21,6 +22,7 @@
             handle-next-default
             handle-previous-default
             clear-completion-immediacy
+            dispatch-completing-read-event
             wrap-navigation?
             ;; State record exports
             make-completing-read-state
@@ -171,6 +173,62 @@ whose car is a string and whose cdr is an integer position within that string."
        (completing-read-state-history-start-input state)
        (completing-read-state-completion-metadata state)
        (completing-read-state-completion-boundaries state))))
+
+;; Dispatch one event produced by `make-key-decoder'.  Keeping this transition
+;; independent of the Wayland loop makes decoded boundary no-ops observable
+;; while ensuring they still break TAB/RET adjacency in production.
+(define* (dispatch-completing-read-event state event options collection
+                                         #:key (predicate #f)
+                                         (selection-mode 'text)
+                                         (require-match #f)
+                                         (style 'substring)
+                                         (input-enabled? #t))
+  (let ((state (if (or (memq event '(next previous next-default
+                                      previous-default left right home end
+                                      backspace ctrl+backspace))
+                       (and (pair? event) (eq? (car event) 'input-char)))
+                   (clear-completion-immediacy state)
+                   state)))
+    (match event
+      ('select
+       (handle-submit state selection-mode
+                      #:collection collection
+                      #:predicate predicate
+                      #:require-match require-match
+                      #:style style))
+      ('next (handle-next state))
+      ('previous (handle-previous state))
+      ('next-default
+       (if input-enabled?
+           (handle-next-history state options)
+           (list 'no-change state)))
+      ('previous-default
+       (if input-enabled?
+           (handle-previous-history state options)
+           (list 'no-change state)))
+      ((and (or 'left 'right 'home 'end) key)
+       (if input-enabled?
+           ((case key
+              ((left) handle-left)
+              ((right) handle-right)
+              ((home) handle-home)
+              ((end) handle-end))
+            state)
+           (list 'no-change state)))
+      ((and (or 'backspace 'ctrl+backspace) key)
+       (if input-enabled?
+           (handle-backspace state options
+                             #:ctrl-pressed? (eq? key 'ctrl+backspace))
+           (list 'no-change state)))
+      ('complete
+       (if input-enabled?
+           (handle-complete state collection options predicate #:style style)
+           (list 'no-change state)))
+      (('input-char char)
+       (if input-enabled?
+           (handle-input-char char state options)
+           (list 'no-change state)))
+      (_ (list 'no-change state)))))
 
 ;; Helper to update state with new input text and reset selection
 (define* (update-text-and-filter state new-text options
