@@ -26,5 +26,6 @@
                  (border-width 2)
                  (line-height 30)
                  (fixed-height? #f)
+                 (input-line-wrapping? #t)
                  (prefix-text "› "))
     (thunk)))

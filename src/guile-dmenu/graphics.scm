@@ -29,6 +29,7 @@
             border-width
             line-height
             fixed-height?
+            input-line-wrapping?
             prefix-text
             item-height
             visible-item-count
@@ -63,6 +64,7 @@
 ;; Layout / behavior
 (define line-height (make-parameter #f))    ; --line-height (#f = auto)
 (define fixed-height? (make-parameter #f))  ; --fixed-height
+(define input-line-wrapping? (make-parameter #f))
 (define prefix-text (make-parameter ""))    ; --prefix, shown before the
                                              ; selected item
 
@@ -86,9 +88,26 @@
       (min option-count max-options)))
 
 ;; Total menu height (prompt row + item rows).
-(define* (menu-height padding option-count max-options #:optional (message-lines 0))
-  (* (+ 1 message-lines (visible-item-count option-count max-options))
+(define* (menu-height padding option-count max-options
+                      #:optional (message-lines 0) (input-lines 1))
+  (* (+ input-lines message-lines
+        (visible-item-count option-count max-options))
      (item-height padding)))
+
+;; Return editable text rows as (START . TEXT) pairs.  The first row shares
+;; horizontal space with the prompt; continuation rows use the full width.
+(define (input-layout prompt input-text width padding)
+  (if (not (input-line-wrapping?))
+      (list (cons 0 input-text))
+      (let* ((columns (max 1 (quotient (max 1 (- width (* 2 padding))) 8)))
+             (first-columns (max 1 (- columns (string-length prompt) 1)))
+             (length (string-length input-text)))
+        (let loop ((start 0) (capacity first-columns) (rows '()))
+          (let* ((end (min length (+ start capacity)))
+                 (next (cons (cons start (substring input-text start end)) rows)))
+            (if (= end length)
+                (reverse next)
+                (loop end columns next)))))))
 
 ;; Wrap text by character count.  Unlike word-only wrappers this also breaks
 ;; commands, paths, and serialized inputs that contain no whitespace.
@@ -257,6 +276,8 @@
                                      #:key (message-lines '()) (input-enabled? #t)
                                      (cursor-position (string-length input-text)))
   (let* ((row-height (item-height padding))
+         (input-rows (input-layout prompt input-text width padding))
+         (input-row-count (length input-rows))
          (tb (title-background-color))
          (tf (or (title-foreground-color) (foreground-color)))
          (fb (filter-background-color))
@@ -300,22 +321,35 @@
       (cairo-move-to cr padding (/ (+ font-size row-height) 2))
       (cairo-show-text cr prompt)
 
-      ;; Draw input text
-      (apply cairo-set-source-rgb cr ff)
-      (cairo-move-to cr x-position (/ (+ font-size row-height) 2))
-      (cairo-show-text cr input-text)
-
-      ;; Draw the cursor after the text preceding its character position.
-      (when input-enabled?
-        (draw-input-cursor! cr input-text cursor-position x-position padding
-                            row-height cb))
+      ;; Draw editable text, with continuation rows when wrapping is enabled.
+      (let loop ((rows input-rows) (index 0))
+        (unless (null? rows)
+          (let* ((row (car rows))
+                 (start (car row))
+                 (text (cdr row))
+                 (row-x (if (zero? index) x-position padding)))
+            (apply cairo-set-source-rgb cr ff)
+            (cairo-move-to cr row-x
+                           (+ (* index row-height)
+                              (/ (+ font-size row-height) 2)))
+            (cairo-show-text cr text)
+            (when (and input-enabled?
+                       (<= start cursor-position)
+                       (or (< cursor-position (+ start (string-length text)))
+                           (and (= cursor-position
+                                   (+ start (string-length text)))
+                                (null? (cdr rows)))))
+              (draw-input-cursor! cr text (- cursor-position start)
+                                  row-x padding row-height cb
+                                  (* index row-height)))
+            (loop (cdr rows) (+ index 1)))))
 
       ;; Read-only detail panel.
       (let loop ((lines message-lines) (index 0))
         (unless (null? lines)
           (apply cairo-set-source-rgb cr (foreground-color))
           (cairo-move-to cr padding
-                         (+ (* (+ index 1) row-height)
+                         (+ (* (+ index input-row-count) row-height)
                             (/ row-height 2) (/ font-size 2)))
           (cairo-show-text cr (car lines))
           (loop (cdr lines) (+ index 1))))
@@ -326,7 +360,8 @@
          (let loop ((items visible-options)
                     (index 0))
            (unless (null? items)
-             (let ((y (* (+ 1 (length message-lines) index) row-height))
+             (let ((y (* (+ input-row-count (length message-lines) index)
+                         row-height))
                    (selected? (= index visible-selected-index))
                    (odd-row? (odd? index)))
                ;; Row background: selection takes priority over alternating rows
@@ -364,7 +399,9 @@
                    #:key (message-lines '()) (input-enabled? #t)
                    (cursor-position (string-length input-text)))
   (let* ((real-height (menu-height padding (length filtered-options) max-options
-                                  (length message-lines)))
+                                  (length message-lines)
+                                  (length (input-layout prompt input-text
+                                                        width padding))))
          (menu-buffer (next-menu-buffer cache width real-height)))
 
     (and menu-buffer
