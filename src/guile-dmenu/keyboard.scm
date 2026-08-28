@@ -183,7 +183,12 @@
                                               xkb-state
                                               "Control"
                                               XKB_STATE_MODS_EFFECTIVE)
-                                             1)))))
+                                             1))))
+           (alt-pressed (not (zero? (logand (xkb-state-mod-name-is-active
+                                             xkb-state
+                                             "Mod1"
+                                             XKB_STATE_MODS_EFFECTIVE)
+                                            1)))))
 
       (cond
        ;; ESC/Ctrl+g/c - Exit program
@@ -194,6 +199,29 @@
        ;; Enter - Select current option
        ((= keysym XKB_KEY_Return)
         (put-message app-channel 'select))
+
+       ;; TAB - Complete the editable input
+       ((= keysym XKB_KEY_Tab)
+        (put-message app-channel 'complete))
+
+       ((= keysym XKB_KEY_Left)
+        (put-message app-channel 'left))
+
+       ((= keysym XKB_KEY_Right)
+        (put-message app-channel 'right))
+
+       ((= keysym XKB_KEY_Home)
+        (put-message app-channel 'home))
+
+       ((= keysym XKB_KEY_End)
+        (put-message app-channel 'end))
+
+       ;; M-n/M-p navigate the defaults without changing candidate selection.
+       ((and alt-pressed (= keysym XKB_KEY_n))
+        (put-message app-channel 'next-default))
+
+       ((and alt-pressed (= keysym XKB_KEY_p))
+        (put-message app-channel 'previous-default))
 
        ;; Down arrow/Ctrl+n - Move selection down
        ((or (= keysym XKB_KEY_Down)
@@ -215,7 +243,7 @@
 
        ;; Character input - Add character
        (else
-        (unless ctrl-pressed
+        (unless (or ctrl-pressed alt-pressed)
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
             (when (unicode-scalar-value? utf32)
               (put-message app-channel `(input-char ,(integer->char utf32))))))))

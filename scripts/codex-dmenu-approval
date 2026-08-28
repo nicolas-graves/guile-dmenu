@@ -30,6 +30,7 @@
   ((module-ref (resolve-interface '(guile-dmenu menu)) 'completing-read)
    "Codex permission request"
    '("Review in terminal" "Allow once" "Deny")
+   #:selection-mode 'menu
    #:message message #:input-enabled? #f #:timeout remaining
    #:max-message-lines 12))
 

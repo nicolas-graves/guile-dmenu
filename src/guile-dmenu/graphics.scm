@@ -253,7 +253,8 @@
 (define* (draw-menu-to-cairo-context cr width real-height padding
                                      prompt input-text selected-index
                                      filtered-options max-options
-                                     #:key (message-lines '()) (input-enabled? #t))
+                                     #:key (message-lines '()) (input-enabled? #t)
+                                     (cursor-position (string-length input-text)))
   (let* ((row-height (item-height padding))
          (tb (title-background-color))
          (tf (or (title-foreground-color) (foreground-color)))
@@ -303,9 +304,11 @@
       (cairo-move-to cr x-position (/ (+ font-size row-height) 2))
       (cairo-show-text cr input-text)
 
-      ;; Draw cursor at end of input when editing is enabled.
+      ;; Draw the cursor after the text preceding its character position.
       (when input-enabled?
-       (let* ((input-extents (cairo-text-extents cr input-text))
+       (let* ((input-before-cursor
+               (substring input-text 0 cursor-position))
+              (input-extents (cairo-text-extents cr input-before-cursor))
              (input-width (cairo-text-extents:width input-extents))
              (cursor-x (+ x-position input-width 2)))
         (apply cairo-set-source-rgb cr cb)
@@ -360,7 +363,8 @@
 (define* (draw-menu width height padding cache
                    prompt input-text selected-index
                    filtered-options max-options
-                   #:key (message-lines '()) (input-enabled? #t))
+                   #:key (message-lines '()) (input-enabled? #t)
+                   (cursor-position (string-length input-text)))
   (let* ((real-height (menu-height padding (length filtered-options) max-options
                                   (length message-lines)))
          (menu-buffer (next-menu-buffer cache width real-height)))
@@ -383,6 +387,7 @@
                                          prompt input-text selected-index
                                          filtered-options max-options
                                          #:message-lines message-lines
+                                         #:cursor-position cursor-position
                                          #:input-enabled? input-enabled?)
 
              ;; Clean up Cairo resources

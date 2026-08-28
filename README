@@ -67,9 +67,51 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
 
 ** Difference with completing-read
 - The ~(guile-dmenu menu)~ module exports ~completing-read~.  In addition to
-  its prompt and collection arguments it accepts ~#:message~,
-  ~#:input-enabled?~, ~#:timeout~, and ~#:max-message-lines~.  It returns the
-  selected string or ~#f~ when cancelled, closed, or timed out.
+  its prompt and collection, it accepts optional positional ~predicate~,
+  ~require-match~, ~initial-input~, ~history~, ~default~, and
+  ~inherit-input-method~ arguments.  Initial input may be a
+  string (cursor at end) or ~(string . zero-based-position)~.  It also accepts ~#:message~,
+  ~#:input-enabled?~, ~#:timeout~, ~#:max-message-lines~, and
+  ~#:selection-mode~.  Selection mode defaults to ~'text~, where RET returns
+  the literal input (including an empty string); ~'menu~ returns the
+  highlighted row.  Collections may be string lists, string-keyed alists,
+  vectors, hash tables, or programmed completion procedures.  Alist
+  predicates receive the complete entry, while the key is displayed.
+  Programmed tables receive ~(input predicate action)~.  In addition to
+  ~#f~, ~#t~, and ~'lambda~ completion operations, the engine queries
+  ~'(metadata)~ and ~'(boundaries . suffix)~ during pure TAB transitions.
+  Metadata responses have the form ~'(metadata . alist)~; boundary responses
+  have the form ~'(boundaries start . end)~.  Cancellation,
+  closure, and timeout return ~#f~.
+
+  In text mode, ~require-match~ ~#f~ accepts literal input.  ~#t~ and other
+  truthy values accept only exact candidates.  ~'confirm~ accepts a non-match
+  after RET is pressed a second time; ~'confirm-after-completion~ requires that
+  second RET only when TAB immediately preceded submission.  A procedure is
+  called with the input and completely controls whether it is accepted.
+
+  Editable input supports Left, Right, Home, and End cursor movement.
+  Character insertion and Backspace operate at the displayed cursor position.
+  Empty text returns the first scalar/list
+  default.  Pass a mutable ~(make-completion-history '("newest" "older"))~
+  value to record successful nonempty text submissions newest-first, or pass
+  ~(history . one-based-position)~ to start navigation at a known entry.  M-p
+  walks backward through history; M-n walks forward to the initial input and
+  then through list defaults.  Consecutive duplicates are suppressed and the
+  ~completion-history-length~ parameter (100 by default, or ~#f~ for
+  unlimited) bounds retained entries.  Passing ~#t~ disables history.
+  When
+  inherit-input-method is true, typed characters pass through the exported
+  ~completion-input-transformer~ parameter.
+
+  The pure completion API provides ~completion-all-completions~,
+  ~completion-try-completion~, ~completion-exact-match?~,
+  ~completion-metadata~, ~completion-boundaries~, and ~completion-submit~.
+  The built-in
+  ~'substring~ style ignores case by default; parameterize
+  ~completion-ignore-case?~ to ~#f~ for case-sensitive matching.  Additional
+  pure styles can be installed with ~register-completion-style!~ and resolved
+  with ~lookup-completion-style~.
 
 * Codex permission approvals
 

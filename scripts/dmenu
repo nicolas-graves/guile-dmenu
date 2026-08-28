@@ -52,6 +52,7 @@
   (when (option-ref opts 'wrap #f) (wrap-navigation? #t))
   (when (option-ref opts 'fixed-height #f) (fixed-height? #t))
   (let ((answer (completing-read prompt (read-stdin)
+                                 #:selection-mode 'menu
                                  #:message (option-ref opts 'message #f)
                                  #:input-enabled? (not (option-ref opts 'no-input #f))
                                  #:timeout (positive-number

@@ -3,6 +3,7 @@
   #:use-module (guile-dmenu graphics)
   #:use-module (guile-dmenu keyboard)
   #:use-module (guile-dmenu filter)
+  #:use-module (guile-dmenu completion)
   #:use-module (wayland client display)
   #:use-module (wayland client protocol wayland)
   #:use-module (wayland client protocol xdg-shell)
@@ -12,20 +13,32 @@
   #:use-module (fibers operations)
   #:use-module (fibers io-wakeup)
   #:use-module (fibers timers)
-  #:export (completing-read menu-width menu-padding menu-max-options))
+  #:export (completing-read menu-width menu-padding menu-max-options)
+  #:re-export (make-completion-history
+               completion-history?
+               completion-history-entries
+               set-completion-history-entries!
+               completion-history-length
+               completion-history-add!))
 
 (define menu-width (make-parameter 800))
 (define menu-padding (make-parameter 4))
 (define menu-max-options (make-parameter #f))
 
 (define (draw-state prompt message-lines input-enabled? conn cache state maximum)
-  (let ((surface (wayland-connection-surface conn)))
+  (let ((surface (wayland-connection-surface conn))
+        (state-message-lines
+         (if (completing-read-state-confirmation-input state)
+             (append message-lines '("Confirm submission with RET"))
+             message-lines)))
     (when surface
       (let ((buffer (draw-menu (menu-width) 0 (menu-padding) cache prompt
                                (completing-read-state-input-text state)
                                (completing-read-state-selected-index state)
                                (completing-read-state-filtered-options state)
-                               maximum #:message-lines message-lines
+                               maximum #:message-lines state-message-lines
+                               #:cursor-position
+                               (completing-read-state-cursor-position state)
                                #:input-enabled? input-enabled?)))
         (when buffer
           (wl-surface-attach surface buffer 0 0)
@@ -33,10 +46,34 @@
           (wl-surface-commit surface))))))
 
 (define* (completing-read prompt collection
+                          #:optional (predicate #f) (require-match #f)
+                          (initial-input "") (history #f) (default #f)
+                          (inherit-input-method #f)
                           #:key (message #f) (input-enabled? #t)
-                          (timeout #f) (max-message-lines 12))
-  "Display COLLECTION and return the selected string, or #f on cancellation."
-  (let* ((maximum (or (menu-max-options) (length collection)))
+                          (timeout #f) (max-message-lines 12)
+                          (selection-mode 'text)
+                          (completion-style 'substring))
+  "Display COLLECTION and submit text or the highlighted menu selection.
+INITIAL-INPUT may be a string or (STRING . ZERO-BASED-POSITION).
+DEFAULT may be a string or list of strings.  Empty input returns its first
+value.  INHERIT-INPUT-METHOD enables `completion-input-transformer' for typed
+input.  HISTORY may be a mutable completion history, a positioned history
+pair, #f, or #t to disable recording.
+SELECTION-MODE may be `text' (the default) or `menu'.  Return #f on
+cancellation."
+  (unless (memq selection-mode '(text menu))
+    (error "unsupported selection mode" selection-mode))
+  ;; Resolve the style before opening a Wayland connection so an invalid
+  ;; option fails deterministically even when TAB is never pressed.
+  (lookup-completion-style completion-style)
+  ;; Validate initial input before connecting to Wayland so malformed public
+  ;; calls fail synchronously and without compositor side effects.
+  (call-with-values (lambda () (normalize-initial-input initial-input)) list)
+  (normalize-defaults default)
+  (call-with-values (lambda () (normalize-history history)) list)
+  (let* ((candidates (normalize-collection collection predicate))
+         (options (map completion-candidate-display candidates))
+         (maximum (or (menu-max-options) (length options)))
          (message-lines (if message
                             (wrap-message-lines message
                                                 (max 20 (quotient (menu-width) 8))
@@ -52,7 +89,8 @@
          (let* ((conn (connect-wayland (make-seat-listener session)))
                 (display (wayland-connection-display conn))
                 (port (fdes->inport (wl-display-get-fd display)))
-                (state (initial-state collection))
+                (state (initial-state options initial-input default
+                                      inherit-input-method history))
                 (read-prepared? #f)
                 (cache (make-menu-buffer-cache
                         (wayland-connection-shm conn)
@@ -97,8 +135,14 @@
                     (set! read-prepared? #f))
                   (match event
                     ('select
-                     (match (handle-select s)
+                     (match (handle-submit
+                             s selection-mode
+                             #:collection collection
+                             #:predicate predicate
+                             #:require-match require-match
+                             #:style completion-style)
                        (('selected value) (put-message result value))
+                       (('state-update n) (redraw n) (loop n))
                        (_ (loop s))))
                     ('next (match (handle-next s)
                              (('state-update n) (redraw n) (loop n))
@@ -106,16 +150,49 @@
                     ('previous (match (handle-previous s)
                                  (('state-update n) (redraw n) (loop n))
                                  (_ (loop s))))
+                    ('next-default
+                     (if input-enabled?
+                         (match (handle-next-history s options)
+                           (('state-update n) (redraw n) (loop n))
+                           (_ (loop s)))
+                         (loop s)))
+                    ('previous-default
+                     (if input-enabled?
+                         (match (handle-previous-history s options)
+                           (('state-update n) (redraw n) (loop n))
+                           (_ (loop s)))
+                         (loop s)))
+                    ((and (or 'left 'right 'home 'end) key)
+                     (if input-enabled?
+                         (let ((transition
+                                ((case key
+                                   ((left) handle-left)
+                                   ((right) handle-right)
+                                   ((home) handle-home)
+                                   ((end) handle-end))
+                                 s)))
+                           (match transition
+                             (('state-update n) (redraw n) (loop n))
+                             (_ (loop s))))
+                         (loop s)))
                     ((and (or 'backspace 'ctrl+backspace) key)
                      (if input-enabled?
-                         (match (handle-backspace s collection
+                         (match (handle-backspace s options
                                                   #:ctrl-pressed? (eq? key 'ctrl+backspace))
+                           (('state-update n) (redraw n) (loop n))
+                           (_ (loop s)))
+                         (loop s)))
+                    ('complete
+                     (if input-enabled?
+                         (match (handle-complete
+                                 s collection options predicate
+                                 #:style completion-style)
                            (('state-update n) (redraw n) (loop n))
                            (_ (loop s)))
                          (loop s)))
                     (('input-char char)
                      (if input-enabled?
-                         (match (handle-input-char char s collection)
+                         (match (handle-input-char char s options)
                            (('state-update n) (redraw n) (loop n))
                            (_ (loop s)))
                          (loop s)))
