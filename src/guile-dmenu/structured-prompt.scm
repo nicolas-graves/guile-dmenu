@@ -89,6 +89,13 @@
 (define (remaining-time deadline clock)
   (and deadline (- deadline (clock))))
 
+(define (timeout-result state auto-resolve?)
+  (let ((resolved (and auto-resolve?
+                       (question-state-resolve-recommended state))))
+    (if resolved
+        (make-question-result 'answered (question-state-complete resolved))
+        (make-question-result 'timed-out #f))))
+
 (define (read-other reader question message deadline clock)
   (let ((remaining (remaining-time deadline clock)))
     (and (or (not remaining) (> remaining 0))
@@ -101,7 +108,7 @@
 
 (define* (ask-questions/result questions
                         #:key (reader graphical-reader) (timeout #f)
-                        (clock monotonic-seconds))
+                        (clock monotonic-seconds) (auto-resolve? #f))
   "Display QUESTIONS and return a structured termination result.
 READER defaults to `completing-read'; injecting it is useful for embedding and
 headless verification."
@@ -110,6 +117,9 @@ headless verification."
     (error "question timeout must be a positive real number or #f" timeout))
   (unless (procedure? clock)
     (error "question clock must be a procedure" clock))
+  (unless (boolean? auto-resolve?)
+    (error "question automatic-resolution marker must be boolean"
+           auto-resolve?))
   (let ((deadline (and timeout (+ (clock) timeout))))
    (let loop ((state (make-question-state questions)))
     (let* ((question (question-state-current-question state))
@@ -143,6 +153,7 @@ headless verification."
                         #f)))
         (lambda (status answer)
          (cond
+       ((eq? status 'timed-out) (timeout-result state auto-resolve?))
        ((not (eq? status 'answered)) (make-question-result status #f))
        ((not (and (integer? answer) (exact? answer)
                   (<= 0 answer) (< answer (length choices))))
@@ -152,11 +163,9 @@ headless verification."
        ((and allow-other? (= answer other-index))
         (let ((text (read-other reader question message deadline clock)))
           (if (not text)
-              (make-question-result
-               (if (and deadline (<= (remaining-time deadline clock) 0))
-                   'timed-out
-                   'cancelled)
-               #f)
+              (if (and deadline (<= (remaining-time deadline clock) 0))
+                  (timeout-result state auto-resolve?)
+                  (make-question-result 'cancelled #f))
               (let ((answered (question-state-answer-other state text)))
                 (let ((next (advance-or-complete
                              answered page (length questions))))

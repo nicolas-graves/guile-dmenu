@@ -171,6 +171,37 @@
       (test-eq "deadline exhaustion is reported as timeout"
         'timed-out (question-result-status result))))
 
+  (let ((times '(0 1 6)))
+    (define (clock)
+      (let ((value (car times)))
+        (set! times (cdr times))
+        value))
+    (let ((result (ask-questions/result
+                   (list first
+                         (make-single-question
+                          'publish "Publish?"
+                          (list (make-question-option 'yes "Yes")
+                                (make-question-option
+                                 'no "No" #:recommended? #t))))
+                   #:reader (lambda args 0)
+                   #:timeout 5 #:clock clock #:auto-resolve? #t)))
+      (test-eq "opt-in timeout resolution completes the batch"
+        'answered (question-result-status result))
+      (test-equal "automatic resolution preserves answers and uses recommendations"
+        '((mode . safe) (publish . no))
+        (question-result-answers result))))
+
+  (let ((result
+         (ask-questions/result
+          (list second) #:reader (lambda args '(reader-result timed-out #f))
+          #:auto-resolve? #t)))
+    (test-eq "automatic resolution requires a recommendation"
+      'timed-out (question-result-status result)))
+
+  (test-error "automatic-resolution marker must be boolean" #t
+    (ask-questions/result (list first) #:reader (lambda args #f)
+                          #:auto-resolve? 'yes))
+
   (test-error "zero batch timeout is rejected" #t
     (ask-questions (list first) #:reader (lambda args #f) #:timeout 0))
   (test-error "non-numeric batch timeout is rejected" #t

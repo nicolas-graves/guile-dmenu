@@ -30,6 +30,7 @@
             question-state-selected-option
             question-state-select
             question-state-answer-other
+            question-state-resolve-recommended
             question-state-back
             question-state-next
             question-state-complete
@@ -212,6 +213,29 @@
    (replace-at (question-state-answers state)
                (question-state-page state)
                (%make-question-other-answer text))))
+
+(define (question-state-resolve-recommended state)
+  "Fill unanswered questions from their recommended options, or return #f.
+Answers already supplied by the user are retained."
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (let loop ((questions (question-state-questions state))
+             (answers (question-state-answers state))
+             (resolved '()))
+    (cond
+     ((null? questions)
+      (%make-question-state (question-state-questions state)
+                            (question-state-page state)
+                            (reverse resolved)))
+     ((car answers)
+      (loop (cdr questions) (cdr answers) (cons (car answers) resolved)))
+     (else
+      (let ((recommended
+             (find question-option-recommended?
+                   (single-question-options (car questions)))))
+        (and recommended
+             (loop (cdr questions) (cdr answers)
+                   (cons recommended resolved))))))))
 
 (define (question-state-back state)
   (unless (question-state? state)

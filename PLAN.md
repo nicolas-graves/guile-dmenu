@@ -93,9 +93,10 @@ public API changes.
   page and Other prompt, id-to-answer results, and structured outcomes for
   answered, user-cancelled, timed-out, window-closed, and graphical-failure
   termination. The compatibility wrappers still return an answer or `#f`.
+  Timeout may optionally resolve unanswered questions from their unique
+  recommended choices when the caller explicitly enables it; supplied answers
+  are retained, and a missing recommendation leaves the outcome timed out.
 - Treat the following as essential readiness gates rather than optional polish:
-  - support optional automatic resolution explicitly configured by the caller;
-    otherwise expiration must report a timeout;
   - add a simple confirmation convenience API on top of the same structured
     result and failure semantics.
 - Add a generic command boundary for non-Scheme callers. It must accept
@@ -144,7 +145,7 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 253 passing tests; no
+- Unit-suite status is documented from the current 257 passing tests; no
   integration or package-build claim is made without running those checks.
 - Structured-question unit tests cover Back/Next state retention, recommended
   default selection, free-form answers, automatic resolution, global deadline

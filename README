@@ -25,7 +25,8 @@ distinct from choosing a negative option.
 Call ~ask-questions/result~ when the caller must distinguish ~answered~,
 ~cancelled~, ~timed-out~, ~window-closed~, and ~graphical-failure~ outcomes.
 The ~ask-questions~ compatibility wrapper continues to return the answer alist
-or ~#f~.
+or ~#f~.  ~#:auto-resolve? #t~ makes timeout use recommended choices for any
+unanswered pages; it succeeds only when every such page has a recommendation.
 
 ** Feature comparison and direction
 
@@ -153,8 +154,9 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
   have the form ~'(boundaries start . end)~.  TAB replaces only that bounded
   field, preserves text on both sides, and leaves the cursor immediately
   after the replacement.  Case-insensitive unique completion inserts the
-  candidate's canonical spelling.  Cancellation,
-  closure, and timeout return ~#f~.
+  candidate's canonical spelling.  The compatibility call returns ~#f~ for
+  cancellation, closure, timeout, and graphical failure;
+  ~completing-read/result~ distinguishes those outcomes.
 
   In text mode, ~require-match~ ~#f~ accepts literal input.  ~#t~ and other
   truthy values accept only exact candidates.  ~'confirm~ accepts a non-match
