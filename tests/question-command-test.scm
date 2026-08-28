@@ -4,17 +4,19 @@
              (srfi srfi-64))
 
 (define request
-  "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":[{\"id\":\"safe\",\"label\":\"Safe\",\"description\":\"Check first\",\"recommended\":true},{\"id\":\"fast\",\"label\":\"Fast\"}]}],\"timeout\":12,\"autoResolve\":true}")
+  "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":[{\"id\":\"safe\",\"label\":\"Safe\",\"description\":\"Check first\",\"recommended\":true},{\"id\":\"fast\",\"label\":\"Fast\"}]}],\"timeout\":12,\"autoResolve\":true,\"context\":\"Repository: guile-dmenu\"}")
 
 (test-begin "JSON question command")
 (call-with-values
     (lambda () (read-question-request (open-input-string request)))
-  (lambda (questions timeout auto-resolve?)
+  (lambda (questions timeout auto-resolve? context)
     (test-equal "request contains one question" 1 (length questions))
     (test-equal "request retains stable ids" "mode"
       (single-question-id (car questions)))
     (test-equal "request retains timeout" 12 timeout)
-    (test-assert "request retains automatic resolution" auto-resolve?)))
+    (test-assert "request retains automatic resolution" auto-resolve?)
+    (test-equal "request retains display context"
+      "Repository: guile-dmenu" context)))
 
 (let* ((output (open-output-string))
        (reader (lambda args 1)))

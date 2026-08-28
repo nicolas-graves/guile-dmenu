@@ -39,21 +39,22 @@
 
 (define (read-question-request port)
   "Read and validate one structured question request from PORT.
-Return QUESTIONS, TIMEOUT, and AUTO-RESOLVE? as three values."
+Return QUESTIONS, TIMEOUT, AUTO-RESOLVE?, and CONTEXT as four values."
   (let* ((request (json->scm port))
          (questions
           (map question-from-json
                (sequence->list (required-field request "questions")
                                "questions")))
          (timeout (field request "timeout"))
-         (auto-resolve? (or (field request "autoResolve") #f)))
+         (auto-resolve? (or (field request "autoResolve") #f))
+         (context (field request "context")))
     (let trailing ()
       (let ((character (read-char port)))
         (unless (eof-object? character)
           (if (char-whitespace? character)
               (trailing)
               (error "trailing data after JSON question request")))))
-    (values questions timeout auto-resolve?)))
+    (values questions timeout auto-resolve? context)))
 
 (define (json-answer entry)
   (let ((answer (cdr entry)))
@@ -75,10 +76,11 @@ Return QUESTIONS, TIMEOUT, and AUTO-RESOLVE? as three values."
   "Consume one JSON request from INPUT and write one JSON outcome to OUTPUT."
   (call-with-values
       (lambda () (read-question-request input))
-    (lambda (questions timeout auto-resolve?)
+    (lambda (questions timeout auto-resolve? context)
       (let ((arguments
              (append (list questions #:timeout timeout
-                           #:auto-resolve? auto-resolve?)
+                           #:auto-resolve? auto-resolve?
+                           #:context context)
                      (if reader (list #:reader reader) '()))))
         (scm->json (question-result->json
                     (apply ask-questions/result arguments))

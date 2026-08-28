@@ -39,6 +39,21 @@
     1 (list-ref (car calls) 4))
   (test-assert "adapter exposes descriptions in the graphical message"
     (string-contains (list-ref (car calls) 5) "Safe: Check first"))
+  (let ((captured-message #f))
+    (ask-questions
+     (list first)
+     #:context "Working directory: /tmp/project"
+     #:reader (lambda* (prompt choices
+                        #:key selection-mode input-enabled?
+                        initial-selected-index message timeout)
+                (set! captured-message message)
+                0))
+    (test-assert "adapter exposes caller context in the graphical message"
+      (string-contains captured-message "Working directory: /tmp/project"))
+    (test-assert "adapter includes concise navigation help"
+      (string-contains captured-message "Enter confirm")))
+  (test-error "adapter rejects non-string context" #t
+    (ask-questions (list first) #:reader (lambda args 0) #:context '(bad)))
   (test-eqv "graphical cancellation stays distinct" #f
     (ask-questions (list first) #:reader (lambda args #f)))
 

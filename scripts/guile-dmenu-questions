@@ -1,6 +1,7 @@
 #!/usr/bin/env guile
 !#
-(use-modules (guile-dmenu question-command)
+(use-modules (guile-dmenu codex)
+             (guile-dmenu question-command)
              (ice-9 exceptions)
              (ice-9 format))
 
@@ -16,4 +17,6 @@
               "guile-dmenu-questions: invalid request or runtime failure~%")
       (primitive-exit 2))
   (lambda ()
-    (run-question-command (current-input-port) (current-output-port))))
+    (call-with-codex-presentation
+     (lambda ()
+       (run-question-command (current-input-port) (current-output-port))))))

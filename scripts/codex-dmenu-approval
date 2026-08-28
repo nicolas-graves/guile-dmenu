@@ -1,6 +1,7 @@
 #!/usr/bin/env guile
 !#
-(use-modules (guile-dmenu approval) (guile-dmenu question)
+(use-modules (guile-dmenu approval) (guile-dmenu codex)
+             (guile-dmenu question)
              (guile-dmenu structured-prompt) (json)
              (ice-9 getopt-long) (ice-9 exceptions) (ice-9 format))
 
@@ -38,11 +39,18 @@
   (let* ((question
           (make-single-question
            'permission "Codex permission request"
-           (list (make-question-option 'review "Review in terminal")
-                 (make-question-option 'allow "Allow once")
-                 (make-question-option 'deny "Deny"))))
+           (list (make-question-option
+                  'review "Review in terminal"
+                  #:description "Return control to Codex without deciding here."
+                  #:recommended? #t)
+                 (make-question-option
+                  'allow "Allow once"
+                  #:description "Run this request once, then ask again next time.")
+                 (make-question-option
+                  'deny "Deny"
+                  #:description "Reject this request and return the decision to Codex."))))
          (arguments
-          (append (list (list question) #:timeout remaining)
+          (append (list (list question) #:timeout remaining #:context message)
                   (if mock (list #:reader (mock-reader mock)) '())))
          (result (apply ask-questions/result arguments)))
     (and (eq? (question-result-status result) 'answered)
@@ -75,8 +83,11 @@
                     (let* (;; Tests can inject a stdin-safe mock without moving
                            ;; request contents into its argv or environment.
                            (mock (getenv "CODEX_DMENU_MOCK_RESPONSE"))
-                           (answer (graphical-choice (request-message request)
-                                                     remaining mock)))
+                           (answer
+                            (call-with-codex-presentation
+                             (lambda ()
+                               (graphical-choice (request-message request)
+                                                 remaining mock)))))
                       (cond ((eq? answer 'allow) (emit (allow-result)))
                             ((eq? answer 'deny) (emit (deny-result))))))))
               (lambda () (flock lock LOCK_UN) (close-port lock))))))))

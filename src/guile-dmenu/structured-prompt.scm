@@ -55,9 +55,9 @@
 (define (option-display option)
   (string-append
    (question-option-label option)
-   (if (question-option-recommended? option) " [Recommended]" "")))
+   (if (question-option-recommended? option) " (Recommended)" "")))
 
-(define (question-message question page total)
+(define (question-message question page total context)
   (let ((descriptions
          (filter-map
           (lambda (option)
@@ -66,7 +66,10 @@
                                 (question-option-description option))))
           (single-question-options question))))
     (string-join
-     (cons (format #f "Question ~a of ~a" (+ page 1) total) descriptions)
+     (append (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Enter confirm  ·  Esc cancel"
+                           (+ page 1) total))
+             (if context (list "" context) '())
+             (if (null? descriptions) '() (cons "" descriptions)))
      "\n")))
 
 (define (option-index options selected)
@@ -112,7 +115,8 @@
 
 (define* (ask-questions/result questions
                         #:key (reader graphical-reader) (timeout #f)
-                        (clock monotonic-seconds) (auto-resolve? #f))
+                        (clock monotonic-seconds) (auto-resolve? #f)
+                        (context #f))
   "Display QUESTIONS and return a structured termination result.
 READER defaults to `completing-read'; injecting it is useful for embedding and
 headless verification."
@@ -124,6 +128,8 @@ headless verification."
   (unless (boolean? auto-resolve?)
     (error "question automatic-resolution marker must be boolean"
            auto-resolve?))
+  (unless (or (not context) (string? context))
+    (error "question context must be a string or #f" context))
   (let ((deadline (and timeout (+ (clock) timeout))))
    (let loop ((state (make-question-state questions)))
     (let* ((question (question-state-current-question state))
@@ -136,7 +142,7 @@ headless verification."
                             (if allow-other? (list %other-label) '())
                             (if (positive? page) (list %back-label) '())))
            (message (question-message
-                     question page (length questions)))
+                     question page (length questions) context))
            (remaining (remaining-time deadline clock))
            (raw-answer
             (and (or (not remaining) (> remaining 0))
