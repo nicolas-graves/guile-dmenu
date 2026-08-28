@@ -260,6 +260,18 @@ whose car is a string and whose cdr is an integer position within that string."
         (list 'selected (list-ref filtered-options selected-index))
         (list 'no-change state))))
 
+;; Return the highlighted position rather than its rendered text.  This is for
+;; callers such as structured prompts whose display labels are not identifiers.
+;; It deliberately shares the menu transition without changing ordinary
+;; string-returning menu behavior.
+(define (handle-select-index state)
+  (let ((filtered-options (completing-read-state-filtered-options state))
+        (selected-index (completing-read-state-selected-index state)))
+    (if (and (not (null? filtered-options))
+             (< selected-index (length filtered-options)))
+        (list 'selected selected-index)
+        (list 'no-change state))))
+
 ;; Submit either the editable input or the highlighted candidate.  Keeping
 ;; this transition independent of Wayland makes the public API's text/menu
 ;; boundary directly testable.
@@ -305,6 +317,7 @@ whose car is a string and whose cdr is an integer position within that string."
                  (completing-read-state-history-start-input state))))
          ((rejected) (list 'no-change state)))))
     ((menu) (handle-select state))
+    ((menu-index) (handle-select-index state))
     (else (error "unsupported selection mode" selection-mode))))
 
 ;; Handle moving selection down

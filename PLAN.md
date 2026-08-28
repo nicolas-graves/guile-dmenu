@@ -83,17 +83,37 @@ public API changes.
 
 - Distinguish this interaction model from the existing Codex
   `PermissionRequest` integration.
-- Record current primitives: message panel, disabled input, choices, timeout,
-  and cancellation.
-- Prioritize a generic structured prompt API supporting:
-  - one to three single-choice questions per session;
-  - two or three labeled options per question;
-  - descriptions, a recommended marker, and optional free-form "Other";
-  - a paged Back/Next flow that preserves prior answers;
-  - final id-to-answer results, with `#f` for cancellation;
-  - a simple confirmation convenience API.
-- Use the existing approval prompt as an eventual real consumer of the generic
-  structured API.
+- Record the implemented foundation: validated question and option records,
+  stable ids, one-to-three-question batches, two or three choices per question,
+  descriptions, recommended markers, retained answers, Back navigation,
+  graphical execution, collision-proof index-to-id selection with input
+  filtering disabled, navigation controls outside the option-id namespace,
+  id-to-answer results, and cancellation.
+- Treat the following as essential readiness gates rather than optional polish:
+  - add optional free-form "Other" entry and return it unambiguously as an
+    answer distinct from every predefined option id;
+  - make the recommended option the initial/default selection when present,
+    while retaining the marker in the presentation;
+  - enforce one overall monotonic deadline across the complete batch rather
+    than restarting the timeout for every page;
+  - support optional automatic resolution explicitly configured by the caller;
+    otherwise expiration must report a timeout;
+  - expose structured outcomes that distinguish answered, user-cancelled,
+    timed-out, window-closed, and graphical-failure cases, while preserving a
+    compatibility wrapper that returns the current answer alist or `#f`;
+  - add a simple confirmation convenience API on top of the same structured
+    result and failure semantics.
+- Add a generic command boundary for non-Scheme callers. It must accept
+  structured JSON questions on stdin, emit only structured answers/outcomes on
+  stdout, reserve stderr for diagnostics, and never pass prompt contents
+  through argv or environment variables.
+- Migrate `codex-dmenu-approval` to the structured prompt API so the real
+  Codex-facing consumer exercises the generic implementation without changing
+  its fail-safe empty-output fallback contract.
+- Do not claim transparent replacement of ordinary Codex questions until Codex
+  exposes an integration point for redirecting them. The currently documented
+  `PermissionRequest` hook covers approval requests only; this external product
+  limitation is separate from graphical widget maturity.
 - Apply fail-safe prompt requirements across this work: distinguish denial from
   cancellation, avoid displaying or logging secrets unnecessarily, and keep
   sensitive content out of argv and environment variables.
@@ -117,7 +137,8 @@ public API changes.
 
 1. Preserve the lean raw-dmenu contract whenever shared completion state is
    refactored.
-2. Add the generic paged confirmation/question API.
+2. Finish the generic paged confirmation/question API and its correctness,
+   outcome, command-boundary, and Codex-approval integration gates.
 3. Expand the rich `completing-read` engine.
 4. Add selected rich vertical bemenu-derived capabilities.
 5. Keep readline as a documented comparison, not a milestone.
@@ -128,10 +149,26 @@ Acceptance checks:
   or intentionally unsupported.
 - README and roadmap no longer describe implemented completion work as future
   work.
-- Unit-suite status is documented from the current 179 passing tests; no
+- Unit-suite status is documented from the current 223 passing tests; no
   integration or package-build claim is made without running those checks.
-- Future structured-question tests cover Back/Next state retention,
-  recommendations, free-form answers, completion, and cancellation.
+- Structured-question unit tests cover Back/Next state retention, recommended
+  default selection, free-form answers, automatic resolution, global deadline
+  exhaustion, and every structured termination outcome.
+- Collision tests cover duplicate display labels, labels containing the
+  recommendation suffix, and labels identical to Back/Next controls; every
+  answer must still resolve through its stable option id.
+- Command-boundary tests cover valid JSON, malformed input, stdout purity,
+  diagnostics, cancellation, and failure outcomes without leaking prompt data
+  through process arguments or environment variables.
+- A headless Wayland integration test exercises a real multi-page question,
+  Back with retained answers, free-form Other input, timeout, window closure,
+  and compositor failure instead of relying only on an injected reader.
+- The Codex approval integration is regression-tested for allow, deny, review
+  in terminal, timeout, lock contention, malformed hook input, and graphical
+  failure. All fallback cases must leave stdout empty.
+- A Guix package build verifies that the question modules, generic command, and
+  migrated approval command are installed and runnable from the packaged
+  environment.
 - Future rich-completion tests cover style ordering and metadata while ensuring
   the ordinary menu path does not invoke those rich mechanisms.
 - No benchmark is introduced in this pass; performance remains an explicit

@@ -59,9 +59,10 @@ DEFAULT may be a string or list of strings.  Empty input returns its first
 value.  INHERIT-INPUT-METHOD enables `completion-input-transformer' for typed
 input.  HISTORY may be a mutable completion history, a positioned history
 pair, #f, or #t to disable recording.
-SELECTION-MODE may be `text' (the default) or `menu'.  Return #f on
-cancellation."
-  (unless (memq selection-mode '(text menu))
+SELECTION-MODE may be `text' (the default), `menu' to return the highlighted
+string, or `menu-index' to return its zero-based displayed position.  Return
+#f on cancellation."
+  (unless (memq selection-mode '(text menu menu-index))
     (error "unsupported selection mode" selection-mode))
   ;; Resolve the style before opening a Wayland connection so an invalid
   ;; option fails deterministically even when TAB is never pressed.

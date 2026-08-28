@@ -33,10 +33,19 @@
   '(selected "highlighted row")
   (handle-submit highlighted-state 'menu))
 
+(test-equal "menu-index mode returns highlighted position"
+  '(selected 1)
+  (handle-submit highlighted-state 'menu-index))
+
 (test-equal "menu mode preserves no-selection transition"
   'no-change
   (car (handle-submit (make-completing-read-state "literal input" 0 '())
                       'menu)))
+
+(test-equal "menu-index mode preserves no-selection transition"
+  'no-change
+  (car (handle-submit (make-completing-read-state "literal input" 0 '())
+                      'menu-index)))
 
 (test-error "unsupported selection mode is rejected" #t
   (handle-submit highlighted-state 'invalid))

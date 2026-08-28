@@ -15,10 +15,14 @@
      'publish "Publish?"
      (list (make-question-option 'yes "Yes")
            (make-question-option 'no "No"))))
-  (define replies (list "Fast [Recommended]" "No"))
+  (define replies (list 0 1))
   (define calls '())
-  (define* (reader prompt choices #:key selection-mode message timeout)
-    (set! calls (append calls (list (list prompt choices selection-mode message))))
+  (define* (reader prompt choices
+                   #:key selection-mode input-enabled? message timeout)
+    (set! calls
+          (append calls
+                  (list (list prompt choices selection-mode input-enabled?
+                              message))))
     (let ((reply (car replies)))
       (set! replies (cdr replies))
       reply))
@@ -26,10 +30,33 @@
     '((mode . fast) (publish . no))
     (ask-questions (list first second) #:reader reader))
   (test-equal "adapter opens one menu session per page" 2 (length calls))
-  (test-eq "adapter requests menu selection" 'menu (list-ref (car calls) 2))
+  (test-eq "adapter requests index selection"
+    'menu-index (list-ref (car calls) 2))
+  (test-assert "adapter disables filtering so indices remain stable"
+    (not (list-ref (car calls) 3)))
   (test-assert "adapter exposes descriptions in the graphical message"
-    (string-contains (list-ref (car calls) 3) "Safe: Check first"))
+    (string-contains (list-ref (car calls) 4) "Safe: Check first"))
   (test-eqv "graphical cancellation stays distinct" #f
     (ask-questions (list first) #:reader (lambda args #f)))
+
+  (let* ((colliding
+          (make-single-question
+           'collision "Collision?"
+           (list (make-question-option 'first "Same")
+                 (make-question-option 'second "Same")
+                 (make-question-option 'back "← Back"))))
+         (answers '(1))
+         (index-reader
+          (lambda* (prompt choices
+                    #:key selection-mode input-enabled? message timeout)
+            (let ((answer (car answers)))
+              (set! answers (cdr answers))
+              answer))))
+    (test-equal "duplicate and navigation-like labels resolve by stable id"
+      '((collision . second))
+      (ask-questions (list colliding) #:reader index-reader)))
+
+  (test-error "adapter rejects an out-of-range reader result" #t
+    (ask-questions (list first) #:reader (lambda args 9)))
   (test-end "graphical structured prompt adapter")
   (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1)))

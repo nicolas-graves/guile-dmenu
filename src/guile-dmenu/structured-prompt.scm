@@ -28,10 +28,6 @@
      (cons (format #f "Question ~a of ~a" (+ page 1) total) descriptions)
      "\n")))
 
-(define (find-option-by-display question display)
-  (find (lambda (option) (string=? display (option-display option)))
-        (single-question-options question)))
-
 (define* (ask-questions questions #:key (reader graphical-reader) (timeout #f))
   "Display QUESTIONS as real graphical menu sessions and return id answers.
 READER defaults to `completing-read'; injecting it is useful for embedding and
@@ -43,21 +39,22 @@ headless verification.  Cancellation from any page returns #f."
            (choices (append (map option-display options)
                             (if (positive? page) (list %back-label) '())))
            (answer (reader (single-question-prompt question) choices
-                           #:selection-mode 'menu
+                           #:selection-mode 'menu-index
+                           #:input-enabled? #f
                            #:message (question-message
                                       question page (length questions))
                            #:timeout timeout)))
       (cond
        ((not answer) (question-state-cancel state))
-       ((string=? answer %back-label)
+       ((not (and (integer? answer) (exact? answer)
+                  (<= 0 answer) (< answer (length choices))))
+        (error "graphical question returned an invalid choice index" answer))
+       ((= answer (length options))
         (loop (question-state-back state)))
        (else
-        (let* ((option (find-option-by-display question answer))
-               (selected (and option
-                              (question-state-select
-                               state (question-option-id option)))))
-          (unless selected
-            (error "graphical question returned an unknown choice" answer))
+        (let* ((option (list-ref options answer))
+               (selected (question-state-select
+                          state (question-option-id option))))
           (if (= page (- (length questions) 1))
               (question-state-complete selected)
               (loop (question-state-next selected)))))))))
