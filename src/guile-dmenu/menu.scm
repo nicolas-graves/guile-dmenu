@@ -88,6 +88,7 @@
                           (inherit-input-method #f)
                           #:key (message #f) (input-enabled? #t)
                           (option-details #f)
+                          (comment-on-tab? #f)
                           (timeout #f) (max-message-lines 12)
                           (selection-mode 'text)
                           (initial-selected-index 0)
@@ -103,6 +104,8 @@ string, or `menu-index' to return its zero-based displayed position.
 INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
   (unless (memq selection-mode '(text menu menu-index))
     (error "unsupported selection mode" selection-mode))
+  (unless (boolean? comment-on-tab?)
+    (error "comment-on-tab marker must be boolean" comment-on-tab?))
   ;; Resolve the style before opening a Wayland connection so an invalid
   ;; option fails deterministically even when TAB is never pressed.
   (lookup-completion-style completion-style)
@@ -197,7 +200,13 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                                   (put-message result '(graphical-failure))
                                   (loop s)))
                     ('complete
-                     (if (and (not input-enabled?) option-details)
+                     (if (and (not input-enabled?) comment-on-tab?)
+                         (put-message
+                          result
+                          `(answered
+                            (comment
+                             ,(completing-read-state-selected-index s))))
+                         (if (and (not input-enabled?) option-details)
                          (begin
                            (set! details-visible? (not details-visible?))
                            (redraw s)
@@ -210,7 +219,7 @@ INITIAL-SELECTED-INDEX controls the initially highlighted displayed candidate."
                                  #:style completion-style
                                  #:input-enabled? input-enabled?)
                            (('state-update n) (redraw n) (loop n))
-                           (_ (loop s)))))
+                           (_ (loop s))))))
                     (_
                      (match (dispatch-completing-read-event
                              s event options collection

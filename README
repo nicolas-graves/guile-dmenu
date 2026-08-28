@@ -78,12 +78,12 @@ boundary rather than an implementation gap.
 | Categories, metadata, sorting, annotation, grouping, and affixation | no | yes | option descriptions | partial | Wishlist: metadata queries exist, rich behavior does not |
 | Completion help and candidate cycling | visible/paged menu | yes | visible choices | missing | Wishlist for the rich engine |
 | Multiple completed values in one input | multi-selection | ~completing-read-multiple~ | question batch | missing | Wishlist |
-| Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | ~#:message~ provides persistent context; Tab toggles the selected choice's ~#:option-details~ text |
+| Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | ~#:message~ provides persistent context; descriptions stay with their choices |
 | Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Structured batches share one monotonic deadline and expose distinct termination outcomes; compatibility calls return ~#f~ |
 | Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | supported | ~confirm/result~ preserves structured outcomes; ~confirm~ is the boolean convenience wrapper |
 | Structured JSON command boundary | no | no | hook/tool transport | supported | One request on stdin and one outcome on stdout; diagnostics use stderr |
 | Batch of one to three questions | no | normally separate calls | yes | supported | Opens one graphical page per question; Back retains answers |
-| Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | supported | Compact labels keep stable ids separate; Tab reveals the selected description; recommended or retained answers set the initial highlight |
+| Choice descriptions, comments, and recommended marker | no | metadata can annotate candidates | yes | supported | Stable ids remain separate from labels; Tab adds a free-form comment to the highlighted choice; recommended or retained answers set the initial highlight |
 | Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | supported | Opt-in per question; returned as a tagged answer distinct from option ids |
 | Distinguish denial, rejection, cancellation, and failure | exit/result conventions | return/quit conventions | yes | partial | Structured prompt outcomes are explicit; approval-hook migration remains wishlist |
 

@@ -55,22 +55,29 @@
 (define (option-display option)
   (string-append
    (question-option-label option)
-   (if (question-option-recommended? option) " (Recommended)" "")))
+   (if (question-option-recommended? option) " (Recommended)" "")
+   (if (question-option-description option)
+       (string-append " — " (question-option-description option))
+       "")))
 
 (define (question-message question page total context)
   (string-join
    (append
-    (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Tab details  ·  Enter confirm  ·  Esc cancel"
+    (list (format #f "Question ~a of ~a  ·  ↑↓ choose  ·  Tab add comment  ·  Enter confirm  ·  Esc cancel"
                   (+ page 1) total))
     (if context (list context) '()))
    "\n"))
 
 (define (option-index options selected)
-  (and (question-option? selected)
+  (and (or (question-option? selected)
+           (question-comment-answer? selected))
        (list-index
         (lambda (option)
           (equal? (question-option-id option)
-                  (question-option-id selected)))
+                  (question-option-id
+                   (if (question-comment-answer? selected)
+                       (question-comment-answer-option selected)
+                       selected))))
         options)))
 
 (define (initial-choice-index state question options)
@@ -100,6 +107,17 @@
   (let ((remaining (remaining-time deadline clock)))
     (and (or (not remaining) (> remaining 0))
          (reader (string-append (single-question-prompt question) " — Other")
+                 '() #f (lambda (input) (not (string-null? input)))
+                 #:selection-mode 'text
+                 #:input-enabled? #t
+                 #:message message
+                 #:timeout remaining))))
+
+(define (read-comment reader question option message deadline clock)
+  (let ((remaining (remaining-time deadline clock)))
+    (and (or (not remaining) (> remaining 0))
+         (reader (string-append (single-question-prompt question) " — "
+                                (question-option-label option) " — Comment")
                  '() #f (lambda (input) (not (string-null? input)))
                  #:selection-mode 'text
                  #:input-enabled? #t
@@ -147,6 +165,7 @@ headless verification."
                          #:selection-mode 'menu-index
                          #:input-enabled? #f
                          #:option-details option-details
+                         #:comment-on-tab? #t
                          #:initial-selected-index
                          (initial-choice-index state question options)
                          #:message message
@@ -163,6 +182,30 @@ headless verification."
          (cond
        ((eq? status 'timed-out) (timeout-result state auto-resolve?))
        ((not (eq? status 'answered)) (make-question-result status #f))
+       ((and (pair? answer) (eq? (car answer) 'comment))
+        (let ((index (cadr answer)))
+          (unless (and (integer? index) (<= 0 index) (< index (length options)))
+            (error "graphical question returned an invalid comment index" index))
+          (let ((option (list-ref options index)))
+            (call-with-values
+                (lambda ()
+                  (reader-result
+                   (read-comment reader question option message deadline clock)))
+              (lambda (comment-status text)
+                (cond
+                 ((eq? comment-status 'timed-out)
+                  (timeout-result state auto-resolve?))
+                 ((not (eq? comment-status 'answered))
+                  (make-question-result comment-status #f))
+                 (else
+                  (let* ((answered
+                          (question-state-answer-comment
+                           state (question-option-id option) text))
+                         (next (advance-or-complete
+                                answered page (length questions))))
+                    (if (question-state? next)
+                        (loop next)
+                        (make-question-result 'answered next))))))))))
        ((not (and (integer? answer) (exact? answer)
                   (<= 0 answer) (< answer (length choices))))
         (error "graphical question returned an invalid choice index" answer))

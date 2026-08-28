@@ -61,9 +61,13 @@ Return QUESTIONS, TIMEOUT, AUTO-RESOLVE?, and CONTEXT as four values."
     (list
      (cons 'id (car entry))
      (cons 'answer
-           (if (and (pair? answer) (eq? (car answer) 'other))
-               (list (cons 'other (cdr answer)))
-               answer)))))
+           (cond
+            ((and (pair? answer) (eq? (car answer) 'other))
+             (list (cons 'other (cdr answer))))
+            ((and (pair? answer) (eq? (car answer) 'choice))
+             (list (cons 'choice (cadr answer))
+                   (cons 'comment (cadddr answer))))
+            (else answer))))))
 
 (define (question-result->json result)
   `((status . ,(symbol->string (question-result-status result)))

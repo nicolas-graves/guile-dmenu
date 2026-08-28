@@ -19,11 +19,12 @@
   (define calls '())
   (define* (reader prompt choices
                    #:key selection-mode input-enabled? initial-selected-index
-                   message timeout option-details)
+                   message timeout option-details comment-on-tab?)
     (set! calls
           (append calls
                   (list (list prompt choices selection-mode input-enabled?
-                              initial-selected-index message option-details))))
+                              initial-selected-index message option-details
+                              comment-on-tab?))))
     (let ((reply (car replies)))
       (set! replies (cdr replies))
       reply))
@@ -37,10 +38,12 @@
     (not (list-ref (car calls) 3)))
   (test-equal "recommended option is highlighted initially"
     1 (list-ref (car calls) 4))
-  (test-assert "adapter keeps descriptions out of compact option rows"
-    (not (string-contains (car (cadr (car calls))) "Check first")))
+  (test-assert "adapter keeps descriptions with their option rows"
+    (string-contains (car (cadr (car calls))) "Check first"))
   (test-equal "adapter supplies descriptions as expandable option details"
     '("Check first" #f) (list-ref (car calls) 6))
+  (test-assert "adapter enables the Codex-style Tab comment workflow"
+    (list-ref (car calls) 7))
   (test-assert "adapter does not repeat descriptions in context"
     (not (string-contains (list-ref (car calls) 5) "Check first")))
   (let ((captured-message #f))
@@ -49,17 +52,29 @@
      #:context "Working directory: /tmp/project"
      #:reader (lambda* (prompt choices
                         #:key selection-mode input-enabled?
-                        initial-selected-index message timeout option-details)
+                        initial-selected-index message timeout option-details
+                        comment-on-tab?)
                 (set! captured-message message)
                 0))
     (test-assert "adapter exposes caller context in the graphical message"
       (string-contains captured-message "Working directory: /tmp/project"))
     (test-assert "adapter includes concise navigation help"
-      (string-contains captured-message "Tab details")))
+      (string-contains captured-message "Tab add comment")))
   (test-error "adapter rejects non-string context" #t
     (ask-questions (list first) #:reader (lambda args 0) #:context '(bad)))
   (test-eqv "graphical cancellation stays distinct" #f
     (ask-questions (list first) #:reader (lambda args #f)))
+
+  (let ((replies '((comment 0) "Check permissions before proceeding")))
+    (test-equal "TAB attaches free-form context to the selected choice"
+      '((mode choice safe comment "Check permissions before proceeding"))
+      (ask-questions
+       (list first)
+       #:reader
+       (lambda args
+         (let ((reply (car replies)))
+           (set! replies (cdr replies))
+           reply)))))
 
   (let ((result (ask-questions/result
                  (list first) #:reader (lambda args 1))))
@@ -85,7 +100,8 @@
         (initial-indices '()))
     (define* (back-reader prompt choices
                           #:key selection-mode input-enabled?
-                          initial-selected-index message timeout option-details)
+                          initial-selected-index message timeout option-details
+                          comment-on-tab?)
       (set! initial-indices
             (append initial-indices (list initial-selected-index)))
       (let ((answer (car replies)))
@@ -107,7 +123,7 @@
          (index-reader
           (lambda* (prompt choices
                     #:key selection-mode input-enabled? initial-selected-index
-                    message timeout option-details)
+                    message timeout option-details comment-on-tab?)
             (let ((answer (car answers)))
               (set! answers (cdr answers))
               answer))))
@@ -130,7 +146,8 @@
           (lambda* (prompt choices
                     #:optional predicate require-match
                     #:key selection-mode input-enabled?
-                    initial-selected-index message timeout option-details)
+                    initial-selected-index message timeout option-details
+                    comment-on-tab?)
             (set! modes (append modes (list selection-mode)))
             (let ((answer (car replies)))
               (set! replies (cdr replies))
@@ -166,7 +183,8 @@
         value))
     (define* (timed-reader prompt choices
                            #:key selection-mode input-enabled?
-                           initial-selected-index message timeout option-details)
+                           initial-selected-index message timeout option-details
+                           comment-on-tab?)
       (set! timeouts (append timeouts (list timeout)))
       (let ((answer (car replies)))
         (set! replies (cdr replies))
@@ -186,7 +204,8 @@
         value))
     (define* (expiring-reader prompt choices
                               #:key selection-mode input-enabled?
-                              initial-selected-index message timeout option-details)
+                              initial-selected-index message timeout option-details
+                              comment-on-tab?)
       (set! reader-calls (+ reader-calls 1))
       0)
     (test-eqv "deadline expiration cancels before opening another page" #f

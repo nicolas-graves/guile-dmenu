@@ -15,6 +15,9 @@
             single-question-allow-other?
             question-other-answer?
             question-other-answer-text
+            question-comment-answer?
+            question-comment-answer-option
+            question-comment-answer-text
             make-single-question-state
             single-question-state?
             single-question-state-question
@@ -30,6 +33,7 @@
             question-state-selected-option
             question-state-select
             question-state-answer-other
+            question-state-answer-comment
             question-state-resolve-recommended
             question-state-back
             question-state-next
@@ -72,6 +76,12 @@
   (%make-question-other-answer text)
   question-other-answer?
   (text question-other-answer-text))
+
+(define-record-type <question-comment-answer>
+  (%make-question-comment-answer option text)
+  question-comment-answer?
+  (option question-comment-answer-option)
+  (text question-comment-answer-text))
 
 (define (duplicate-option-id options)
   (find (lambda (option)
@@ -214,6 +224,24 @@
                (question-state-page state)
                (%make-question-other-answer text))))
 
+(define (question-state-answer-comment state option-id text)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (unless (and (string? text) (not (string-null? text)))
+    (error "choice comment must be a nonempty string" text))
+  (let* ((question (question-state-current-question state))
+         (option (find (lambda (candidate)
+                         (equal? option-id (question-option-id candidate)))
+                       (single-question-options question))))
+    (unless option
+      (error "unknown question option id" option-id))
+    (%make-question-state
+     (question-state-questions state)
+     (question-state-page state)
+     (replace-at (question-state-answers state)
+                 (question-state-page state)
+                 (%make-question-comment-answer option text)))))
+
 (define (question-state-resolve-recommended state)
   "Fill unanswered questions from their recommended options, or return #f.
 Answers already supplied by the user are retained."
@@ -264,14 +292,22 @@ Answers already supplied by the user are retained."
     (error "expected a question state" state))
   (unless (every (lambda (answer)
                    (or (question-option? answer)
-                       (question-other-answer? answer)))
+                       (question-other-answer? answer)
+                       (question-comment-answer? answer)))
                  (question-state-answers state))
     (error "cannot complete with unanswered questions"))
   (map (lambda (question answer)
          (cons (single-question-id question)
-               (if (question-option? answer)
-                   (question-option-id answer)
-                   (cons 'other (question-other-answer-text answer)))))
+               (cond
+                ((question-option? answer) (question-option-id answer))
+                ((question-other-answer? answer)
+                 (cons 'other (question-other-answer-text answer)))
+                (else
+                 (list 'choice
+                       (question-option-id
+                        (question-comment-answer-option answer))
+                       'comment
+                       (question-comment-answer-text answer))))))
        (question-state-questions state)
        (question-state-answers state)))
 

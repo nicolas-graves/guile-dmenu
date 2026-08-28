@@ -72,8 +72,14 @@
   (test-assert "Other answer is retained as a distinct value"
     (question-other-answer?
      (question-state-selected-option answered)))
-  (test-equal "Other completion is tagged independently of option ids"
+(test-equal "Other completion is tagged independently of option ids"
     '((details other . "custom details"))
+    (question-state-complete answered)))
+
+(let* ((state (make-question-state (list other-question)))
+       (answered (question-state-answer-comment state 'safe "Please inspect first")))
+  (test-equal "choice comments retain both the option and free-form text"
+    '((details choice safe comment "Please inspect first"))
     (question-state-complete answered)))
 
 (test-error "Other answer requires question opt-in" #t
