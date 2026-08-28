@@ -78,5 +78,28 @@
 
   (test-error "adapter rejects an out-of-range reader result" #t
     (ask-questions (list first) #:reader (lambda args 9)))
+
+  (let* ((other-question
+          (make-single-question
+           'details "Details?"
+           (list (make-question-option 'brief "Brief")
+                 (make-question-option 'full "Full"))
+           #:allow-other? #t))
+         (replies '(2 "custom details"))
+         (modes '())
+         (other-reader
+          (lambda* (prompt choices
+                    #:optional predicate require-match
+                    #:key selection-mode input-enabled?
+                    initial-selected-index message timeout)
+            (set! modes (append modes (list selection-mode)))
+            (let ((answer (car replies)))
+              (set! replies (cdr replies))
+              answer))))
+    (test-equal "Other selection returns a tagged free-form answer"
+      '((details other . "custom details"))
+      (ask-questions (list other-question) #:reader other-reader))
+    (test-equal "Other switches from indexed choice to text entry"
+      '(menu-index text) modes))
   (test-end "graphical structured prompt adapter")
   (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1)))

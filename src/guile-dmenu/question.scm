@@ -12,6 +12,9 @@
             single-question-id
             single-question-prompt
             single-question-options
+            single-question-allow-other?
+            question-other-answer?
+            question-other-answer-text
             make-single-question-state
             single-question-state?
             single-question-state-question
@@ -26,6 +29,7 @@
             question-state-current-question
             question-state-selected-option
             question-state-select
+            question-state-answer-other
             question-state-back
             question-state-next
             question-state-complete
@@ -56,11 +60,17 @@
   (%make-question-option id label description recommended?))
 
 (define-record-type <single-question>
-  (%make-single-question id prompt options)
+  (%make-single-question id prompt options allow-other?)
   single-question?
   (id single-question-id)
   (prompt single-question-prompt)
-  (options single-question-options))
+  (options single-question-options)
+  (allow-other? single-question-allow-other?))
+
+(define-record-type <question-other-answer>
+  (%make-question-other-answer text)
+  question-other-answer?
+  (text question-other-answer-text))
 
 (define (duplicate-option-id options)
   (find (lambda (option)
@@ -71,13 +81,15 @@
              1))
         options))
 
-(define (make-single-question id prompt options)
+(define* (make-single-question id prompt options #:key (allow-other? #f))
   (unless (or (symbol? id) (and (string? id) (not (string-null? id))))
     (error "question id must be a symbol or nonempty string" id))
   (unless (and (string? prompt) (not (string-null? prompt)))
     (error "question prompt must be a nonempty string" prompt))
   (unless (and (list? options) (every question-option? options))
     (error "question options must be a list of question options" options))
+  (unless (boolean? allow-other?)
+    (error "question allow-other marker must be boolean" allow-other?))
   (unless (memv (length options) '(2 3))
     (error "a single question requires two or three options" options))
   (let ((duplicate (duplicate-option-id options)))
@@ -86,7 +98,7 @@
              (question-option-id duplicate))))
   (when (> (count question-option-recommended? options) 1)
     (error "a question may have at most one recommended option" options))
-  (%make-single-question id prompt options))
+  (%make-single-question id prompt options allow-other?))
 
 (define-record-type <single-question-state>
   (%make-single-question-state question selected-option)
@@ -186,6 +198,21 @@
      (replace-at (question-state-answers state)
                  (question-state-page state) option))))
 
+(define (question-state-answer-other state text)
+  (unless (question-state? state)
+    (error "expected a question state" state))
+  (unless (single-question-allow-other?
+           (question-state-current-question state))
+    (error "current question does not allow an Other answer"))
+  (unless (and (string? text) (not (string-null? text)))
+    (error "Other answer must be a nonempty string" text))
+  (%make-question-state
+   (question-state-questions state)
+   (question-state-page state)
+   (replace-at (question-state-answers state)
+               (question-state-page state)
+               (%make-question-other-answer text))))
+
 (define (question-state-back state)
   (unless (question-state? state)
     (error "expected a question state" state))
@@ -211,10 +238,16 @@
 (define (question-state-complete state)
   (unless (question-state? state)
     (error "expected a question state" state))
-  (unless (every question-option? (question-state-answers state))
+  (unless (every (lambda (answer)
+                   (or (question-option? answer)
+                       (question-other-answer? answer)))
+                 (question-state-answers state))
     (error "cannot complete with unanswered questions"))
-  (map (lambda (question option)
-         (cons (single-question-id question) (question-option-id option)))
+  (map (lambda (question answer)
+         (cons (single-question-id question)
+               (if (question-option? answer)
+                   (question-option-id answer)
+                   (cons 'other (question-other-answer-text answer)))))
        (question-state-questions state)
        (question-state-answers state)))
 

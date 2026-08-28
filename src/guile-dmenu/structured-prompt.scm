@@ -6,6 +6,7 @@
   #:export (ask-questions))
 
 (define %back-label "← Back")
+(define %other-label "Other…")
 
 (define (graphical-reader . arguments)
   (apply (module-ref (resolve-interface '(guile-dmenu menu)) 'completing-read)
@@ -29,17 +30,33 @@
      "\n")))
 
 (define (option-index options selected)
-  (and selected
+  (and (question-option? selected)
        (list-index
         (lambda (option)
           (equal? (question-option-id option)
                   (question-option-id selected)))
         options)))
 
-(define (initial-option-index state options)
+(define (initial-choice-index state question options)
   (or (option-index options (question-state-selected-option state))
+      (and (question-other-answer? (question-state-selected-option state))
+           (single-question-allow-other? question)
+           (length options))
       (list-index question-option-recommended? options)
       0))
+
+(define (advance-or-complete state page total)
+  (if (= page (- total 1))
+      (question-state-complete state)
+      (question-state-next state)))
+
+(define (read-other reader question message timeout)
+  (reader (string-append (single-question-prompt question) " — Other")
+          '() #f (lambda (input) (not (string-null? input)))
+          #:selection-mode 'text
+          #:input-enabled? #t
+          #:message message
+          #:timeout timeout))
 
 (define* (ask-questions questions #:key (reader graphical-reader) (timeout #f))
   "Display QUESTIONS as real graphical menu sessions and return id answers.
@@ -49,27 +66,40 @@ headless verification.  Cancellation from any page returns #f."
     (let* ((question (question-state-current-question state))
            (page (question-state-page state))
            (options (single-question-options question))
+           (allow-other? (single-question-allow-other? question))
+           (other-index (and allow-other? (length options)))
+           (back-index (+ (length options) (if allow-other? 1 0)))
            (choices (append (map option-display options)
+                            (if allow-other? (list %other-label) '())
                             (if (positive? page) (list %back-label) '())))
+           (message (question-message
+                     question page (length questions)))
            (answer (reader (single-question-prompt question) choices
                            #:selection-mode 'menu-index
                            #:input-enabled? #f
                            #:initial-selected-index
-                           (initial-option-index state options)
-                           #:message (question-message
-                                      question page (length questions))
+                           (initial-choice-index state question options)
+                           #:message message
                            #:timeout timeout)))
       (cond
        ((not answer) (question-state-cancel state))
        ((not (and (integer? answer) (exact? answer)
                   (<= 0 answer) (< answer (length choices))))
         (error "graphical question returned an invalid choice index" answer))
-       ((= answer (length options))
+       ((and (positive? page) (= answer back-index))
         (loop (question-state-back state)))
+       ((and allow-other? (= answer other-index))
+        (let ((text (read-other reader question message timeout)))
+          (if (not text)
+              (question-state-cancel state)
+              (let ((answered (question-state-answer-other state text)))
+                (let ((next (advance-or-complete
+                             answered page (length questions))))
+                  (if (question-state? next) (loop next) next))))))
        (else
         (let* ((option (list-ref options answer))
                (selected (question-state-select
                           state (question-option-id option))))
-          (if (= page (- (length questions) 1))
-              (question-state-complete selected)
-              (loop (question-state-next selected)))))))))
+          (let ((next (advance-or-complete
+                       selected page (length questions))))
+            (if (question-state? next) (loop next) next))))))))

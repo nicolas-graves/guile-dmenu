@@ -45,6 +45,11 @@
 (test-assert "two options are valid"
   (single-question?
    (make-single-question "confirm" "Continue?" (list safe fast))))
+(define other-question
+  (make-single-question 'details "Details?" (list safe fast)
+                        #:allow-other? #t))
+(test-assert "Other answers are opt-in"
+  (single-question-allow-other? other-question))
 (test-error "fewer than two options are rejected" #t
   (make-single-question 'bad "Bad?" (list safe)))
 (test-error "more than three options are rejected" #t
@@ -61,6 +66,21 @@
   (single-question-select initial 'missing))
 (test-error "an unanswered question cannot complete" #t
   (single-question-complete initial))
+
+(let* ((state (make-question-state (list other-question)))
+       (answered (question-state-answer-other state "custom details")))
+  (test-assert "Other answer is retained as a distinct value"
+    (question-other-answer?
+     (question-state-selected-option answered)))
+  (test-equal "Other completion is tagged independently of option ids"
+    '((details other . "custom details"))
+    (question-state-complete answered)))
+
+(test-error "Other answer requires question opt-in" #t
+  (question-state-answer-other (make-question-state (list question)) "text"))
+(test-error "Other answer cannot be empty" #t
+  (question-state-answer-other
+   (make-question-state (list other-question)) ""))
 
 (define format-question
   (make-single-question 'format "Output format?"
