@@ -2,7 +2,53 @@
 
 * Guile-Dmenu
 
-This repository provides a guile library and client program inspired by dmenu.  It will also provide a guile Emacs-like completing-read procedure in a near future.
+This repository provides a Guile library and client program inspired by dmenu.
+It includes a graphical, Emacs-shaped ~completing-read~ procedure as well as a
+Wayland dmenu client.
+
+** Feature comparison and direction
+
+The table compares the three active product inspirations with the current
+guile-dmenu implementation.  The five comparison columns follow the feature
+name.  “Wishlist” is accepted roadmap work; “not planned” is an intentional
+boundary rather than an implementation gap.
+
+| Feature | bemenu | Emacs ~completing-read~ | Codex-like questions | guile-dmenu | Comment |
+|-
+| Vertical list and selection | yes | completion candidates | yes | supported | Core behavior |
+| Horizontal menu layout | default mode | not applicable | not applicable | missing | Not planned; guile-dmenu stays vertical |
+| stdin choices and stdout result | yes | no | no | supported | Preserve the lean dmenu contract |
+| Fast filtering of plain string lists | yes | yes | small fixed choice sets | supported | Rich completion work must not materially slow this path |
+| Selectable case sensitivity | ~--ignorecase~ | ~completion-ignore-case~ | not applicable | partial | Wishlist: expose the existing library parameter through dmenu |
+| Prompt, prefix, row limit, wrap, border, height, and colors | yes | prompt and faces | prompt UI | partial | Wishlist: remaining useful vertical presentation |
+| Top/bottom/center placement, monitor, margin, and width | yes | Emacs-managed | host-managed | missing | Wishlist, subject to suitable Wayland protocols |
+| Scrollbar, result counter, font, cursor sizing, and border radius | yes | Emacs-managed | host-managed | missing | Wishlist |
+| Pointer and touch selection | yes | Emacs input events | host UI | missing | Wishlist |
+| Multiple selected menu items | yes | ~completing-read-multiple~ is separate | one answer per question | missing | Wishlist for the vertical picker |
+| Password or secret input display | yes | separate password readers | sensitive context is possible | missing | Wishlist, with fail-safe secret handling |
+| Text clipping, scrolling, shaping, and full Unicode display | Pango-backed | Emacs text engine | host UI | partial | Wishlist: robust display handling; Unicode input already works |
+| Positional ~completing-read~ call contract | no | canonical | no | supported | Implemented |
+| Lists, alists, vectors, hash tables, and predicates | string items | lists, alists, obarrays, tables | structured choices | supported | Supported for the documented Guile representations |
+| Programmed completion tables | no | yes | no | supported | Try/all/exact, metadata, and boundary actions are implemented |
+| Exact-match and confirmation policies | selection must be an item | ~require-match~ variants | explicit validation | supported | Implemented in text mode |
+| Initial input, point, defaults, and history | filter/index options | yes | retained answers | supported | Uses explicit Guile history objects |
+| Ordered completion-style pipeline | built-in matcher | yes | no | partial | Wishlist: rich engine; only pluggable substring exists now |
+| Categories, metadata, sorting, annotation, grouping, and affixation | no | yes | option descriptions | partial | Wishlist: metadata queries exist, rich behavior does not |
+| Completion help and candidate cycling | visible/paged menu | yes | visible choices | missing | Wishlist for the rich engine |
+| Multiple completed values in one input | multi-selection | ~completing-read-multiple~ | question batch | missing | Wishlist |
+| Read-only detail or explanation panel | no | prompt/minibuffer messages | yes | supported | Available through ~#:message~ |
+| Timeout and safe cancellation | cancellation | quit minibuffer | cancellation or unanswered prompt | supported | Cancellation, closure, and timeout return ~#f~ |
+| Generic yes/no confirmation API | choices can model it | separate Emacs prompt APIs | yes | partial | Wishlist: promote existing primitives into a convenience API |
+| Batch of one to three questions | no | normally separate calls | yes | missing | Wishlist: one paged Back/Next session |
+| Choice descriptions and recommended marker | no | metadata can annotate candidates | yes | missing | Wishlist for structured questions |
+| Optional free-form “Other” answer | filter text can be returned | arbitrary input when permitted | yes | missing | Wishlist for structured questions |
+| Distinguish denial, rejection, cancellation, and failure | exit/result conventions | return/quit conventions | yes | partial | Wishlist: explicit structured results; approval hook is partial |
+
+Guile readline remains a comparison reference, not a fourth compatibility
+target.  Guile-dmenu already overlaps with its basic editing, completion,
+history traversal, and repeat behavior, but direct readline reuse, terminal-port
+integration, ~.inputrc~ compatibility, and API parity are not planned.  See
+~PLAN.md~ for the detailed boundaries and roadmap order.
 
 ** Try it!
 
@@ -18,11 +64,13 @@ in your Sway configuration for the expected result (otherwise Sway will take ove
 
 * FAQ
 
-** What is not there yet ?
+** What is not there yet?
 - [X] Basic personalization: colors, prefix, border, wrap, item count, fixed
   height, line height (see "Configuration" below)
-- [ ] I haven't checked Unicode support (maybe a need for guile-pango).
-- [ ] Compatibility with the bemenu API / configuration library
+- [X] Supplementary Unicode keyboard input
+- [ ] Complete Unicode shaping may require Pango.
+- [ ] Strict compatibility with the bemenu API/configuration library is not
+  planned; see the comparison table above.
 - [X] Repeat
 - [ ] Check some corner cases / handle all data sent as configuration by the compositor
 - [ ] No pointer/mouse support (no wl_pointer listener, no click-to-select)
