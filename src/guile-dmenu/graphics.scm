@@ -98,12 +98,21 @@
 (define (available-columns width padding)
   (max 1 (quotient (max 1 (- width (* 2 padding))) 8)))
 
-(define (wrap-text text columns)
-  (define (break-position start limit)
-    (let find ((position limit))
-      (cond ((<= position start) limit)
+(define (wrap-text cr text maximum-width)
+  (define (text-width start end)
+    (cairo-text-extents:x-advance
+     (cairo-text-extents cr (substring text start end))))
+  (define (fit-position start)
+    (let fit ((position (+ start 1)))
+      (cond ((> position (string-length text)) (string-length text))
+            ((<= (text-width start position) maximum-width)
+             (fit (+ position 1)))
+            (else (max (+ start 1) (- position 1))))))
+  (define (break-position start fitted)
+    (let find ((position fitted))
+      (cond ((<= position start) fitted)
             ((char-whitespace? (string-ref text (- position 1)))
-             (if (= position (+ start 1)) limit (- position 1)))
+             (if (= position (+ start 1)) fitted (- position 1)))
             (else (find (- position 1))))))
   (define (skip-whitespace position)
     (if (and (< position (string-length text))
@@ -111,12 +120,14 @@
         (skip-whitespace (+ position 1))
         position))
   (let loop ((start 0) (lines '()))
-    (let ((limit (min (string-length text) (+ start columns))))
-      (if (= limit (string-length text))
-          (reverse (cons (substring text start limit) lines))
-          (let ((end (break-position start limit)))
-            (loop (skip-whitespace end)
-                  (cons (substring text start end) lines)))))))
+    (if (= start (string-length text))
+        (reverse (if (null? lines) (list "") lines))
+        (let ((fitted (fit-position start)))
+          (if (= fitted (string-length text))
+              (reverse (cons (substring text start fitted) lines))
+              (let ((end (break-position start fitted)))
+                (loop (skip-whitespace end)
+                      (cons (substring text start end) lines))))))))
 
 ;; Return editable text rows as (START . TEXT) pairs.  The first row shares
 ;; horizontal space with the prompt; continuation rows use the full width.
@@ -133,14 +144,14 @@
                 (reverse next)
                 (loop end columns next)))))))
 
-(define (option-layout options selected-index width padding)
+(define (option-layout cr options selected-index width padding)
   (map (lambda (option index)
          (let ((text (string-append (if (= index selected-index)
                                         (prefix-text)
                                         "")
                                     option)))
            (if (input-line-wrapping?)
-               (wrap-text text (available-columns width padding))
+               (wrap-text cr text (max 1 (- width (* 2 padding))))
                (list text))))
        options
        (iota (length options))))
@@ -393,7 +404,7 @@
       ;; Draw the page containing the selected option.
       (match (menu-visible-window filtered-options selected-index max-options)
         ((visible-options visible-selected-index)
-         (let loop ((items (option-layout visible-options
+         (let loop ((items (option-layout cr visible-options
                                           visible-selected-index width padding))
                     (index 0)
                     (line-offset 0))
@@ -442,19 +453,28 @@
                    filtered-options max-options
                    #:key (message-lines '()) (input-enabled? #t)
                    (cursor-position (string-length input-text)))
-  (let* ((real-height (menu-height padding (length filtered-options) max-options
+  (let* ((option-line-count
+          (let* ((surface (cairo-image-surface-create 'argb32 1 1))
+                 (cr (cairo-create surface)))
+            (cairo-select-font-face cr font-face 'normal 'normal)
+            (cairo-set-font-size cr font-size)
+            (let ((count
+                   (match (menu-visible-window filtered-options selected-index
+                                               max-options)
+                     ((visible-options visible-selected-index)
+                      (fold + 0
+                            (map length
+                                 (option-layout cr visible-options
+                                                visible-selected-index
+                                                width padding)))))))
+              (cairo-destroy cr)
+              (cairo-surface-destroy surface)
+              count)))
+         (real-height (menu-height padding (length filtered-options) max-options
                                   (length message-lines)
                                   (length (input-layout prompt input-text
                                                         width padding))
-                                  (match (menu-visible-window filtered-options
-                                                              selected-index
-                                                              max-options)
-                                    ((visible-options visible-selected-index)
-                                     (fold + 0
-                                           (map length
-                                                (option-layout visible-options
-                                                               visible-selected-index
-                                                               width padding)))))))
+                                  option-line-count))
          (menu-buffer (next-menu-buffer cache width real-height)))
 
     (and menu-buffer
