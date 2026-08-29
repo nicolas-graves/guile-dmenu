@@ -22,7 +22,9 @@
                  (title-foreground-color (rgb "#ffffff"))
                  (alt-background-color (rgb "#ffffff"))
                  (alt-foreground-color (rgb "#24292f"))
-                 (border-color (rgb "#ff0000"))
+                 ;; Match Sway's default focused-window border.  The active
+                 ;; Sway configuration does not override client.focused.
+                 (border-color (rgb "#4c7899"))
                  (border-width 2)
                  (line-height 30)
                  (fixed-height? #f)
