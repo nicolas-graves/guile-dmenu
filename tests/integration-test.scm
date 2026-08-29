@@ -166,17 +166,19 @@
         (string-contains
          stdout
          "{\"id\":\"detail\",\"answer\":{\"other\":\"custom detail\"}}"))
-      (test-equal "interactive question emitted no diagnostics" "" stderr))))
+      (test-equal "interactive question emitted no diagnostics" "" stderr)))
   (let* ((request
           (string-append
            "{\"timeout\":10,\"questions\":["
            "{\"id\":\"direction\",\"prompt\":\"Direction?\",\"options\":["
            "{\"id\":\"polish\",\"label\":\"Polish\"},"
            "{\"id\":\"integrate\",\"label\":\"Integrate\"}]}]}"))
+         (event-count (length (read-river-manager-events session)))
          (client (start-questions session request)))
     (eventually "comment question window was configured"
                 (lambda ()
-                  (configured-event (read-river-manager-events session))))
+                  (configured-event
+                   (drop (read-river-manager-events session) event-count))))
     ;; Ask to qualify the highlighted choice, then type in the inline editor
     ;; while the same Wayland surface keeps the selected choice visible.
     (river-session-wtype
