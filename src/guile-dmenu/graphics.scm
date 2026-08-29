@@ -89,17 +89,28 @@
 
 ;; Total menu height (prompt row + item rows).
 (define* (menu-height padding option-count max-options
-                      #:optional (message-lines 0) (input-lines 1))
+                      #:optional (message-lines 0) (input-lines 1)
+                      (option-lines #f))
   (* (+ input-lines message-lines
-        (visible-item-count option-count max-options))
+        (or option-lines (visible-item-count option-count max-options)))
      (item-height padding)))
+
+(define (available-columns width padding)
+  (max 1 (quotient (max 1 (- width (* 2 padding))) 8)))
+
+(define (wrap-text text columns)
+  (let loop ((start 0) (lines '()))
+    (let ((end (min (string-length text) (+ start columns))))
+      (if (= end (string-length text))
+          (reverse (cons (substring text start end) lines))
+          (loop end (cons (substring text start end) lines))))))
 
 ;; Return editable text rows as (START . TEXT) pairs.  The first row shares
 ;; horizontal space with the prompt; continuation rows use the full width.
 (define (input-layout prompt input-text width padding)
   (if (not (input-line-wrapping?))
       (list (cons 0 input-text))
-      (let* ((columns (max 1 (quotient (max 1 (- width (* 2 padding))) 8)))
+      (let* ((columns (available-columns width padding))
              (first-columns (max 1 (- columns (string-length prompt) 1)))
              (length (string-length input-text)))
         (let loop ((start 0) (capacity first-columns) (rows '()))
@@ -108,6 +119,18 @@
             (if (= end length)
                 (reverse next)
                 (loop end columns next)))))))
+
+(define (option-layout options selected-index width padding)
+  (map (lambda (option index)
+         (let ((text (string-append (if (= index selected-index)
+                                        (prefix-text)
+                                        "")
+                                    option)))
+           (if (input-line-wrapping?)
+               (wrap-text text (available-columns width padding))
+               (list text))))
+       options
+       (iota (length options))))
 
 ;; Wrap text by character count.  Unlike word-only wrappers this also breaks
 ;; commands, paths, and serialized inputs that contain no whitespace.
@@ -357,21 +380,25 @@
       ;; Draw the page containing the selected option.
       (match (menu-visible-window filtered-options selected-index max-options)
         ((visible-options visible-selected-index)
-         (let loop ((items visible-options)
-                    (index 0))
+         (let loop ((items (option-layout visible-options
+                                          visible-selected-index width padding))
+                    (index 0)
+                    (line-offset 0))
            (unless (null? items)
-             (let ((y (* (+ input-row-count (length message-lines) index)
-                         row-height))
+             (let* ((lines (car items))
+                    (line-count (length lines))
+                    (y (* (+ input-row-count (length message-lines) line-offset)
+                          row-height))
                    (selected? (= index visible-selected-index))
                    (odd-row? (odd? index)))
                ;; Row background: selection takes priority over alternating rows
                (cond (selected?
                       (apply cairo-set-source-rgb cr hb)
-                      (cairo-rectangle cr 0 y width row-height)
+                      (cairo-rectangle cr 0 y width (* line-count row-height))
                       (cairo-fill cr))
                      ((and ab odd-row?)
                       (apply cairo-set-source-rgb cr ab)
-                      (cairo-rectangle cr 0 y width row-height)
+                      (cairo-rectangle cr 0 y width (* line-count row-height))
                       (cairo-fill cr)))
                ;; Item text, optionally prefixed on the selected item
                (apply cairo-set-source-rgb cr (cond (selected? hf)
@@ -380,10 +407,14 @@
                ;; Options are rows of their own, not continuations of the
                ;; prompt/input row.  Starting them at x-position made a long
                ;; prompt consume (and sometimes visually clip) their text.
-               (cairo-move-to cr padding (+ y (/ row-height 2) (/ font-size 2)))
-               (cairo-show-text cr (string-append (if selected? (prefix-text) "")
-                                                   (car items)))
-               (loop (cdr items) (+ index 1))))))))
+               (let draw-lines ((remaining lines) (line-index 0))
+                 (unless (null? remaining)
+                   (cairo-move-to cr padding
+                                  (+ y (* line-index row-height)
+                                     (/ row-height 2) (/ font-size 2)))
+                   (cairo-show-text cr (car remaining))
+                   (draw-lines (cdr remaining) (+ line-index 1))))
+               (loop (cdr items) (+ index 1) (+ line-offset line-count))))))))
 
     ;; Border, drawn last so it isn't painted over
     (when (> bw 0)
@@ -401,7 +432,16 @@
   (let* ((real-height (menu-height padding (length filtered-options) max-options
                                   (length message-lines)
                                   (length (input-layout prompt input-text
-                                                        width padding))))
+                                                        width padding))
+                                  (match (menu-visible-window filtered-options
+                                                              selected-index
+                                                              max-options)
+                                    ((visible-options visible-selected-index)
+                                     (fold + 0
+                                           (map length
+                                                (option-layout visible-options
+                                                               visible-selected-index
+                                                               width padding)))))))
          (menu-buffer (next-menu-buffer cache width real-height)))
 
     (and menu-buffer
