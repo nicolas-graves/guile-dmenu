@@ -99,11 +99,24 @@
   (max 1 (quotient (max 1 (- width (* 2 padding))) 8)))
 
 (define (wrap-text text columns)
+  (define (break-position start limit)
+    (let find ((position limit))
+      (cond ((<= position start) limit)
+            ((char-whitespace? (string-ref text (- position 1)))
+             (if (= position (+ start 1)) limit (- position 1)))
+            (else (find (- position 1))))))
+  (define (skip-whitespace position)
+    (if (and (< position (string-length text))
+             (char-whitespace? (string-ref text position)))
+        (skip-whitespace (+ position 1))
+        position))
   (let loop ((start 0) (lines '()))
-    (let ((end (min (string-length text) (+ start columns))))
-      (if (= end (string-length text))
-          (reverse (cons (substring text start end) lines))
-          (loop end (cons (substring text start end) lines))))))
+    (let ((limit (min (string-length text) (+ start columns))))
+      (if (= limit (string-length text))
+          (reverse (cons (substring text start limit) lines))
+          (let ((end (break-position start limit)))
+            (loop (skip-whitespace end)
+                  (cons (substring text start end) lines)))))))
 
 ;; Return editable text rows as (START . TEXT) pairs.  The first row shares
 ;; horizontal space with the prompt; continuation rows use the full width.
