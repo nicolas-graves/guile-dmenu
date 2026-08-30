@@ -28,30 +28,38 @@
             ((>= (now) deadline) (close-port port) #f)
             (else (usleep 50000) (loop))))))
 (define (emit value) (scm->json value) (newline))
-(define (mock-reader response)
-  (let ((index (cond ((equal? response "Review in terminal") 0)
-                     ((equal? response "Allow once") 1)
-                     ((equal? response "Deny") 2)
+(define (choice-label choice)
+  (cond ((eq? choice 'review) "Review in terminal")
+        ((eq? choice 'allow) "Allow once")
+        ((eq? choice 'deny) "Deny")
+        (else (format #f "~a" choice))))
+(define (comment-feedback choice comment)
+  (format #f "Selected choice: ~a\nComment: ~a"
+          (choice-label choice) comment))
+(define (mock-reader response comment)
+  (let ((index (cond ((equal? response "Allow once") 0)
+                     ((equal? response "Deny") 1)
                      (else #f))))
-    (lambda args index)))
+    (lambda args
+      (and index
+           (if comment (list 'comment index comment) index)))))
 
-(define (graphical-choice message remaining mock)
+(define (graphical-choice message remaining mock mock-comment)
   (let* ((question
           (make-single-question
            'permission "Codex permission request"
            (list (make-question-option
-                  'review "Review in terminal"
-                  #:description "Return control to Codex without deciding here."
-                  #:recommended? #t)
-                 (make-question-option
                   'allow "Allow once"
-                  #:description "Run this request once, then ask again next time.")
+                  #:description "Run this request once, then ask again next time."
+                  #:recommended? #t)
                  (make-question-option
                   'deny "Deny"
                   #:description "Reject this request and return the decision to Codex."))))
          (arguments
           (append (list (list question) #:timeout remaining #:context message)
-                  (if mock (list #:reader (mock-reader mock)) '())))
+                  (if mock
+                      (list #:reader (mock-reader mock mock-comment))
+                      '())))
          (result (apply ask-questions/result arguments)))
     (and (eq? (question-result-status result) 'answered)
          (assq-ref (question-result-answers result) 'permission))))
@@ -83,11 +91,40 @@
                     (let* (;; Tests can inject a stdin-safe mock without moving
                            ;; request contents into its argv or environment.
                            (mock (getenv "CODEX_DMENU_MOCK_RESPONSE"))
+                           (mock-comment
+                            (let ((value
+                                   (getenv "CODEX_DMENU_MOCK_COMMENT")))
+                              (and value (not (string-null? value)) value)))
                            (answer
                             (call-with-codex-presentation
                              (lambda ()
                                (graphical-choice (request-message request)
-                                                 remaining mock)))))
-                      (cond ((eq? answer 'allow) (emit (allow-result)))
-                            ((eq? answer 'deny) (emit (deny-result))))))))
-              (lambda () (flock lock LOCK_UN) (close-port lock))))))))
+                                                 remaining mock
+                                                 mock-comment)))))
+                      (cond
+                       ((eq? answer 'allow) (emit (allow-result)))
+                       ((eq? answer 'deny) (emit (deny-result)))
+                       ;; An approval has no decision.message field, so attach
+                       ;; its comment through PermissionRequest's supported
+                       ;; top-level systemMessage channel instead.
+                       ((and (list? answer)
+                             (= (length answer) 4)
+                             (eq? (car answer) 'choice)
+                             (eq? (cadr answer) 'allow)
+                             (eq? (caddr answer) 'comment)
+                             (string? (cadddr answer)))
+                        (emit (allow-result
+                               (comment-feedback (cadr answer)
+                                                 (cadddr answer)))))
+                       ((and (list? answer)
+                             (= (length answer) 4)
+                             (eq? (car answer) 'choice)
+                             (eq? (cadr answer) 'deny)
+                             (eq? (caddr answer) 'comment)
+                             (string? (cadddr answer)))
+                        (emit (deny-result
+                               (comment-feedback (cadr answer)
+                                                 (cadddr answer))))))))))
+              (lambda ()
+                (flock lock LOCK_UN)
+                (close-port lock))))))))

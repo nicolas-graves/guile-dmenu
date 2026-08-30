@@ -22,23 +22,27 @@
 (define (request-message request)
   (let* ((input (or (ref request 'tool_input) (ref request 'toolInput)
                     (ref request 'input)))
+         (cwd (first-ref request '(cwd working_directory workingDirectory)))
+         (project
+          (or (first-ref request '(project project_name projectName))
+              (and (string? cwd)
+                   (let ((parts (remove string-null? (string-split cwd #\/))))
+                     (and (pair? parts) (last parts))))))
+         (reason
+          (or (first-ref request '(reason description))
+              (and (list? input)
+                   (first-ref input '(reason description justification)))))
          (command (or (and (list? input)
                            (first-ref input '(command cmd path url)))
                       input)))
     (string-join
-     (list (string-append "Model/session: "
-                          (display-value (or (ref request 'model)
-                                             (ref request 'session_id)
-                                             (ref request 'sessionId))))
-           (string-append "Project: "
-                          (display-value (first-ref request '(project project_name projectName))))
+     (list (string-append "Project: "
+                          (display-value project))
            (string-append "Working directory: "
-                          (display-value (first-ref request '(cwd working_directory workingDirectory))))
-           (string-append "Tool: "
-                          (display-value (first-ref request '(tool_name toolName tool))))
+                          (display-value cwd))
            (string-append "Reason: "
-                          (display-value (first-ref request '(reason description))))
-           (string-append "Command/input: " (display-value command)))
+                          (display-value reason))
+           (string-append "Requested command: " (display-value command)))
      "\n")))
 
 (define (decision behavior . message)
@@ -47,5 +51,11 @@
         (decision . ,(append `((behavior . ,behavior))
                              (if (null? message) '()
                                  `((message . ,(car message))))))))))
-(define (allow-result) (decision "allow"))
-(define (deny-result) (decision "deny" "Denied from graphical approval prompt."))
+(define* (allow-result #:optional system-message)
+  (append (decision "allow")
+          (if system-message
+              `((systemMessage . ,system-message))
+              '())))
+(define* (deny-result
+          #:optional (message "Denied from graphical approval prompt."))
+  (decision "deny" message))

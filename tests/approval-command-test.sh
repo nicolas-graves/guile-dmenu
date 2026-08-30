@@ -11,11 +11,15 @@ run_approval() {
   response=$1
   output=$2
   error=$3
+  comment=${4-}
   printf '%s\n' "$request" |
     GUILE_AUTO_COMPILE=0 \
     GUILE_LOAD_PATH="$project_dir/src${GUILE_LOAD_PATH:+:$GUILE_LOAD_PATH}" \
     XDG_RUNTIME_DIR="$test_dir" \
+    WAYLAND_DISPLAY=default \
     CODEX_DMENU_MOCK_RESPONSE="$response" \
+    CODEX_DMENU_MOCK_COMMENT="$comment" \
+    CODEX_DMENU_TIMEOUT="${CODEX_DMENU_TIMEOUT-}" \
     "$project_dir/scripts/codex-dmenu-approval" >"$output" 2>"$error"
 }
 
@@ -24,6 +28,18 @@ grep -q '"behavior":"allow"' "$test_dir/allow"
 
 run_approval 'Deny' "$test_dir/deny" "$test_dir/deny.err"
 grep -q '"behavior":"deny"' "$test_dir/deny"
+
+run_approval 'Allow once' "$test_dir/comment" "$test_dir/comment.err" \
+  'Check permissions before proceeding'
+grep -q '"behavior":"allow"' "$test_dir/comment"
+grep -q '"systemMessage":"Selected choice: Allow once\\nComment: Check permissions before proceeding"' \
+  "$test_dir/comment"
+
+run_approval 'Deny' "$test_dir/deny-comment" "$test_dir/deny-comment.err" \
+  'Use the narrower command instead'
+grep -q '"behavior":"deny"' "$test_dir/deny-comment"
+grep -q '"message":"Selected choice: Deny\\nComment: Use the narrower command instead"' \
+  "$test_dir/deny-comment"
 
 run_approval 'Review in terminal' "$test_dir/review" "$test_dir/review.err"
 test ! -s "$test_dir/review"
