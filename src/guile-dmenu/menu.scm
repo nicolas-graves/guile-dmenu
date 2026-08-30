@@ -1,4 +1,5 @@
 (define-module (guile-dmenu menu)
+  #:use-module (guile-dmenu startup)
   #:use-module (guile-dmenu wayland)
   #:use-module (guile-dmenu graphics)
   #:use-module (guile-dmenu keyboard)
@@ -93,7 +94,8 @@
         (when buffer
           (wl-surface-attach surface buffer 0 0)
           (wl-surface-damage surface 0 0 (menu-width) 10000)
-          (wl-surface-commit surface))))))
+          (wl-surface-commit surface)
+          (report-startup-phase! 'first-frame-committed))))))
 
 (define* (completing-read/result prompt collection
                           #:optional (predicate #f) (require-match #f)
@@ -142,6 +144,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                                                 (max 20 (quotient (menu-width) 8))
                                                 max-message-lines)
                             '())))
+    (report-startup-phase! 'collection-normalized)
     (unless (or (not option-details)
                 (and (list? option-details)
                      (= (length option-details) (length options))
@@ -161,9 +164,13 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
          (let* ((conn (connect-wayland (make-seat-listener session)))
                 (display (wayland-connection-display conn))
                 (port (fdes->inport (wl-display-get-fd display)))
+                (_wayland-phase
+                 (report-startup-phase! 'wayland-connected))
                 (state (initial-state options initial-input default
                                       inherit-input-method history
                                       initial-selected-index))
+                (_state-phase
+                 (report-startup-phase! 'initial-state-constructed))
                 (buffer-scale 1)
                 (read-prepared? #f)
                 (details-visible? #f)
@@ -193,6 +200,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                 (set! buffer-scale scale)
                 (spawn-fiber (lambda () (put-message events 'redraw))))
               #t))
+           (report-startup-phase! 'window-created)
            ;; Send the initial empty surface commit before waiting for the
            ;; compositor's configure event.  Redrawing before configure is a
            ;; protocol error, but waiting without flushing deadlocks startup.

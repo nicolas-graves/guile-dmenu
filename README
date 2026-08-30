@@ -16,6 +16,12 @@ set ``GUILE_PERFORMANCE_HARNESS_DIR`` to use another checkout.  Results report
 median, p95, MAD/noise, allocation, and GC metrics.  Wayland transaction and
 lifecycle costs intentionally remain in guile-river's benchmark suite.
 
+Set ``GUILE_DMENU_STARTUP_TRACE=1`` when running ``dmenu`` to write startup
+phase timestamps to standard error.  The trace covers module loading, input
+ingestion, collection normalization, the Wayland connection, initial state,
+window creation, and the first committed frame.  Normal command output and
+behavior are unchanged when tracing is disabled.
+
 Structured questions can now drive real graphical sessions through
 ~(guile-dmenu structured-prompt)~:
 
