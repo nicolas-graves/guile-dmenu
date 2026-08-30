@@ -62,6 +62,21 @@
   (make-single-question
    'bad "Bad?"
    (list safe (make-question-option 'other "Other" #:recommended? #t))))
+(test-error "empty option ids are rejected" #t
+  (make-question-option "" "Empty id"))
+(test-error "empty option labels are rejected" #t
+  (make-question-option 'empty ""))
+(test-error "non-string option descriptions are rejected" #t
+  (make-question-option 'bad-description "Bad" #:description '(bad)))
+(test-error "non-boolean recommendation markers are rejected" #t
+  (make-question-option 'bad-recommendation "Bad" #:recommended? 'yes))
+(test-error "empty question ids are rejected" #t
+  (make-single-question "" "Bad?" (list safe fast)))
+(test-error "empty question prompts are rejected" #t
+  (make-single-question 'bad "" (list safe fast)))
+(test-error "non-boolean Other markers are rejected" #t
+  (make-single-question 'bad "Bad?" (list safe fast)
+                        #:allow-other? 'yes))
 (test-error "unknown option selection is rejected" #t
   (single-question-select initial 'missing))
 (test-error "an unanswered question cannot complete" #t
@@ -87,6 +102,12 @@
 (test-error "Other answer cannot be empty" #t
   (question-state-answer-other
    (make-question-state (list other-question)) ""))
+(test-error "choice comment cannot be empty" #t
+  (question-state-answer-comment
+   (make-question-state (list question)) 'safe ""))
+(test-error "choice comment requires a known option" #t
+  (question-state-answer-comment
+   (make-question-state (list question)) 'missing "comment"))
 
 (define format-question
   (make-single-question 'format "Output format?"

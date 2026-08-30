@@ -159,6 +159,25 @@
 
   (test-error "adapter rejects an out-of-range reader result" #t
     (ask-questions (list first) #:reader (lambda args 9)))
+  (test-error "adapter rejects an inexact reader index" #t
+    (ask-questions (list first) #:reader (lambda args 1.0)))
+  (test-error "adapter rejects an unknown reader status" #t
+    (ask-questions/result
+     (list first)
+     #:reader (lambda args '(reader-result disconnected #f))))
+  (test-error "adapter rejects a malformed reader result" #t
+    (ask-questions/result
+     (list first)
+     #:reader (lambda args '(reader-result answered))))
+
+  (test-error "inline comments require a valid option index" #t
+    (ask-questions
+     (list first)
+     #:reader (lambda args '(comment 4 "out of range"))))
+  (test-error "two-stage comments require a valid option index" #t
+    (ask-questions
+     (list first)
+     #:reader (lambda args '(comment -1))))
 
   (let* ((other-question
           (make-single-question
@@ -286,6 +305,8 @@
     (ask-questions (list first) #:reader (lambda args #f) #:timeout 0))
   (test-error "non-numeric batch timeout is rejected" #t
     (ask-questions (list first) #:reader (lambda args #f) #:timeout "soon"))
+  (test-error "question clock must be callable" #t
+    (ask-questions (list first) #:reader (lambda args #f) #:clock 0))
 
   (let ((result (confirm/result "Continue?" #:reader (lambda args 0))))
     (test-eq "confirmation success uses structured outcomes"

@@ -6,6 +6,8 @@
 (define request
   "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":[{\"id\":\"safe\",\"label\":\"Safe\",\"description\":\"Check first\",\"recommended\":true},{\"id\":\"fast\",\"label\":\"Fast\"}]}],\"timeout\":12,\"autoResolve\":true,\"context\":\"Repository: guile-dmenu\"}")
 
+(define runner (test-runner-simple))
+(test-runner-current runner)
 (test-begin "JSON question command")
 (call-with-values
     (lambda () (read-question-request (open-input-string request)))
@@ -65,4 +67,37 @@
   (read-question-request (open-input-string "{}")))
 (test-error "a second stdin payload is rejected" #t
   (read-question-request (open-input-string (string-append request "{}"))))
+(test-error "questions must be encoded as an array" #t
+  (read-question-request
+   (open-input-string "{\"questions\":{\"id\":\"mode\"}}")))
+(test-error "question options must be encoded as an array" #t
+  (read-question-request
+   (open-input-string
+    "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":{}}]}")))
+(test-error "JSON option ids must be present" #t
+  (read-question-request
+   (open-input-string
+    "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":[{\"label\":\"Safe\"},{\"id\":\"fast\",\"label\":\"Fast\"}]}]}")))
+(test-error "JSON boolean fields are validated" #t
+  (read-question-request
+   (open-input-string
+    "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"allowOther\":\"yes\",\"options\":[{\"id\":\"safe\",\"label\":\"Safe\"},{\"id\":\"fast\",\"label\":\"Fast\"}]}]}")))
+
+(for-each
+ (lambda (status)
+   (let* ((outcome-request
+           "{\"questions\":[{\"id\":\"mode\",\"prompt\":\"Mode?\",\"options\":[{\"id\":\"safe\",\"label\":\"Safe\"},{\"id\":\"fast\",\"label\":\"Fast\"}]}]}")
+          (output (open-output-string))
+          (reader (lambda args (list 'reader-result status #f))))
+     (run-question-command (open-input-string outcome-request) output
+                           #:reader reader)
+     (let ((response
+            (json->scm (open-input-string (get-output-string output)))))
+       (test-equal (string-append "command serializes "
+                                  (symbol->string status) " status")
+         (symbol->string status) (assoc-ref response "status"))
+       (test-eqv "terminated command has no answers" #f
+         (assoc-ref response "answers")))))
+ '(cancelled timed-out window-closed graphical-failure))
 (test-end "JSON question command")
+(primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1))
