@@ -12,11 +12,14 @@
 (gi-import "Pango")
 (gi-import "PangoCairo")
 
-;; Keep the current presentation unchanged while moving all text through
-;; Pango.  Font configuration remains deliberately out of scope for this
-;; migration; the px suffix preserves Cairo's former pixel size.
-(define default-font-face "Sans")
-(define default-font-pixel-size 14)
+;; Follow the host's monospace Fontconfig alias.  This keeps the menu aligned
+;; with terminal and editor font configuration.  Pango's unsuffixed size is in
+;; points, matching the size configured by terminal emulators.
+(define default-font-face "monospace")
+(define default-font-point-size 14)
+;; 14 points at Pango's conventional 96 DPI is approximately 19 pixels.  Keep
+;; this separately for row geometry, whose dimensions are expressed in pixels.
+(define default-font-pixel-size 19)
 
 ;; guile-cairo represents cairo_t as a smob, while G-Golf's introspected
 ;; PangoCairo procedures accept the underlying foreign pointer.  guile-cairo
@@ -33,7 +36,7 @@
 (define (font-description)
   (pango-font-description-from-string
    (string-append default-font-face " "
-                  (number->string default-font-pixel-size) "px")))
+                  (number->string default-font-point-size))))
 
 (define (make-text-layout cr text)
   (let ((layout (pango-cairo-create-layout (cairo-context-pointer cr))))
