@@ -1,6 +1,7 @@
 (use-modules (guile-dmenu completion)
              (guile-dmenu cursor-render)
              (guile-dmenu filter)
+             (guile-dmenu pango)
              (cairo)
              (ice-9 hash-table)
              (rnrs bytevectors)
@@ -356,13 +357,8 @@
 (define render-height 22)
 
 (define (measured-cursor-x cr input input-x cursor-position)
-  (cairo-select-font-face cr "Sans" 'normal 'normal)
-  (cairo-set-font-size cr 14)
-  (inexact->exact
-   (floor (+ input-x 2
-             (cairo-text-extents:x-advance
-              (cairo-text-extents cr
-                                  (substring input 0 cursor-position)))))))
+  (+ input-x 2
+     (pango-text-width cr (substring input 0 cursor-position))))
 
 (define (rendered-cursor-x input cursor-position)
   (let* ((surface (cairo-image-surface-create
@@ -406,11 +402,10 @@
    ("cursor rectangle is at trailing-space x-advance" "ab " 3)))
 
 (let* ((surface (cairo-image-surface-create 'argb32 1 1))
-       (cr (cairo-create surface))
-       (extents (cairo-text-extents cr "ab ")))
-  (test-assert "trailing whitespace advances beyond its ink rectangle"
-    (> (cairo-text-extents:x-advance extents)
-       (cairo-text-extents:width extents)))
+       (cr (cairo-create surface)))
+  (test-assert "Pango measurement includes trailing whitespace"
+    (> (pango-text-width cr "ab ")
+       (pango-text-width cr "ab")))
   (cairo-destroy cr)
   (cairo-surface-destroy surface))
 

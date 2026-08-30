@@ -66,9 +66,31 @@
           (string-append (dirname (current-filename))
                          "/../patches/guile-wayland-client-event-object-type.patch"))))))))
 
+;; G-Golf is Guile-facing, but its test-only native inputs include GTK and an
+;; X server.  Letting the broad Guile replacement recurse through those inputs
+;; rebuilds their entire closure (including Mesa, librsvg, and Rust tooling)
+;; merely because a build tool deep in that graph happens to use Guile.
+;; Rebuild only G-Golf and the pure-Scheme guile-lib it directly consumes.
+(define-public guile-lib-next
+  (package/inherit guile-lib
+    (inputs
+     (modify-inputs (package-inputs guile-lib)
+       (replace "guile" guile-next)))
+    (native-inputs
+     (modify-inputs (package-native-inputs guile-lib)
+       (replace "guile" guile-next)))))
+
+(define-public guile-g-golf-next
+  (package/inherit guile-g-golf
+    (inputs
+     (modify-inputs (package-inputs guile-g-golf)
+       (replace "guile" guile-next)
+       (replace "guile-lib" guile-lib-next)))))
+
 (define next
   (package-input-rewriting/spec
-   `(("guile" . ,(const guile-next))
+   `(("guile-g-golf" . ,(const guile-g-golf-next))
+     ("guile" . ,(const guile-next))
      ("guile-bytestructure-class" . ,(const guile-bytestructure-class-next))
      ("guile-wayland" . ,(const guile-wayland-next))
      ;; Don't try to rebuild those.
@@ -115,15 +137,22 @@
                        `("GUILE_LOAD_PATH" ":" prefix
                          ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
                        `("GUILE_LOAD_COMPILED_PATH" ":" prefix
-                         ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:))))
+                         ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:))
+                       `("GI_TYPELIB_PATH" ":" prefix
+                         ,(string-split (getenv "GI_TYPELIB_PATH") #\:))
+                       `("LD_LIBRARY_PATH" ":" prefix
+                         (,(string-append #$cairo "/lib")
+                          ,(string-append #$pango "/lib")))))
                    (list dmenu approval questions mcp))))))))
       (native-inputs (list guile-3.0))
       (inputs (list bash-minimal guile-3.0))
       (propagated-inputs (list guile-cairo
+                               guile-g-golf
                                guile-fibers
                                guile-json-4
                                guile-wayland
-                               guile-xkbcommon))
+                               guile-xkbcommon
+                               pango))
       (home-page "https://git.sr.ht/~ngraves/guile-dmenu")
       (synopsis "Guile completing-read library and dynamic menu")
       (description "This package provides a guile wayland implementation

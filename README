@@ -85,7 +85,7 @@ boundary rather than an implementation gap.
 | Pointer and touch selection | yes | Emacs input events | host UI | missing | Wishlist |
 | Multiple selected menu items | yes | ~completing-read-multiple~ is separate | one answer per question | missing | Wishlist for the vertical picker |
 | Password or secret input display | yes | separate password readers | sensitive context is possible | missing | Wishlist, with fail-safe secret handling |
-| Text clipping, scrolling, shaping, and full Unicode display | Pango-backed | Emacs text engine | host UI | partial | Wishlist: robust display handling; Unicode input already works |
+| Text clipping, scrolling, shaping, and full Unicode display | Pango-backed | Emacs text engine | host UI | partial | Pango now provides shaping, measurement, and font fallback; clipping and scrolling remain wishlist work |
 | Positional ~completing-read~ call contract | no | canonical | no | supported | Implemented |
 | Lists, alists, vectors, hash tables, and predicates | string items | lists, alists, obarrays, tables | structured choices | supported | Supported for the documented Guile representations |
 | Programmed completion tables | no | yes | no | supported | Try/all/exact, metadata, and boundary actions are implemented |

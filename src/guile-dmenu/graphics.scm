@@ -1,6 +1,7 @@
 (define-module (guile-dmenu graphics)
   #:use-module (guile-dmenu cursor-render)
   #:use-module (guile-dmenu memory-utils)
+  #:use-module (guile-dmenu pango)
   #:use-module (wayland client protocol wayland)
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
@@ -39,10 +40,6 @@
 
 (define WL_SHM_FORMAT_ARGB8888 0)
 
-;; Cairo font settings
-(define font-face "Sans")
-(define font-size 14)
-
 ;; Colors. Naming follows bemenu's flag names (nb/nf, hb/hf, fb/ff, ...) so
 ;; options are trivially portable. Parameters left #f fall back to
 ;; foreground-color/background-color at draw time, which keeps default
@@ -77,7 +74,7 @@
 
 ;; Height (in pixels) of a single prompt/item row.
 (define (item-height padding)
-  (or (line-height) (+ font-size (* 2 padding))))
+  (or (line-height) (+ default-font-pixel-size (* 2 padding))))
 
 ;; Number of item rows actually drawn, given how many options matched and
 ;; the configured cap. With fixed-height?, always reserves room for
@@ -100,8 +97,7 @@
 
 (define (wrap-text cr text maximum-width)
   (define (text-width start end)
-    (cairo-text-extents:x-advance
-     (cairo-text-extents cr (substring text start end))))
+    (pango-text-width cr (substring text start end)))
   (define (fit-position start)
     (let fit ((position (+ start 1)))
       (cond ((> position (string-length text)) (string-length text))
@@ -365,13 +361,8 @@
     (cairo-rectangle cr 0 0 width real-height)
     (cairo-fill cr)
 
-    ;; Set font
-    (cairo-select-font-face cr font-face 'normal 'normal)
-    (cairo-set-font-size cr font-size)
-
-    ;; Calculate the text extents for the prompt
-    (let* ((text-extents (cairo-text-extents cr prompt))
-           (prompt-x-advance (cairo-text-extents:x-advance text-extents))
+    ;; Calculate the Pango layout width for the prompt.
+    (let* ((prompt-x-advance (pango-text-width cr prompt))
            ;; Position after the prompt with a small gap
            (x-position (+ padding prompt-x-advance 2)))
 
@@ -389,8 +380,7 @@
 
       ;; Draw input prompt
       (apply cairo-set-source-rgb cr tf)
-      (cairo-move-to cr padding (/ (+ font-size row-height) 2))
-      (cairo-show-text cr prompt)
+      (draw-pango-text! cr prompt padding 0 row-height)
 
       ;; Draw editable text, with continuation rows when wrapping is enabled.
       (let loop ((rows input-rows) (index 0))
@@ -400,10 +390,7 @@
                  (text (cdr row))
                  (row-x (if (zero? index) x-position padding)))
             (apply cairo-set-source-rgb cr ff)
-            (cairo-move-to cr row-x
-                           (+ (* index row-height)
-                              (/ (+ font-size row-height) 2)))
-            (cairo-show-text cr text)
+            (draw-pango-text! cr text row-x (* index row-height) row-height)
             (when (and input-enabled?
                        (<= start cursor-position)
                        (or (< cursor-position (+ start (string-length text)))
@@ -419,10 +406,9 @@
       (let loop ((lines message-lines) (index 0))
         (unless (null? lines)
           (apply cairo-set-source-rgb cr (foreground-color))
-          (cairo-move-to cr padding
-                         (+ (* (+ index input-row-count) row-height)
-                            (/ row-height 2) (/ font-size 2)))
-          (cairo-show-text cr (car lines))
+          (draw-pango-text! cr (car lines) padding
+                            (* (+ index input-row-count) row-height)
+                            row-height)
           (loop (cdr lines) (+ index 1))))
 
       ;; Draw the page containing the selected option.
@@ -457,10 +443,9 @@
                ;; prompt consume (and sometimes visually clip) their text.
                (let draw-lines ((remaining lines) (line-index 0))
                  (unless (null? remaining)
-                   (cairo-move-to cr padding
-                                  (+ y (* line-index row-height)
-                                     (/ row-height 2) (/ font-size 2)))
-                   (cairo-show-text cr (car remaining))
+                   (draw-pango-text! cr (car remaining) padding
+                                     (+ y (* line-index row-height))
+                                     row-height)
                    (draw-lines (cdr remaining) (+ line-index 1))))
                (loop (cdr items) (+ index 1) (+ line-offset line-count))))))))
 
@@ -481,8 +466,6 @@
   (let* ((option-line-count
           (let* ((surface (cairo-image-surface-create 'argb32 1 1))
                  (cr (cairo-create surface)))
-            (cairo-select-font-face cr font-face 'normal 'normal)
-            (cairo-set-font-size cr font-size)
             (let ((count
                    (match (menu-visible-window filtered-options selected-index
                                                max-options)
