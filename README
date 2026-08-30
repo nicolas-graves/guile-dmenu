@@ -156,7 +156,7 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
 ```
 
 - ~-p, --prompt~: prompt text.
-- ~-l, --list~: max number of items shown at once (default: all matches).
+- ~-l, --list~: max number of items shown at once (default: 10).
 - ~-w, --wrap~: wrap selection at the top/bottom of the list.
 - ~-P, --prefix~: text shown before the selected item.
 - ~-B, --border~: border width in pixels (0 = no border, the default).

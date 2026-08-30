@@ -33,7 +33,9 @@
 
 (define menu-width (make-parameter 800))
 (define menu-padding (make-parameter 4))
-(define menu-max-options (make-parameter #f))
+;; Keep the default surface bounded even for very large candidate sets.
+;; Callers and the dmenu -l option can still choose a different limit.
+(define menu-max-options (make-parameter 10))
 
 (define-record-type <completing-read-result>
   (make-completing-read-result status value)

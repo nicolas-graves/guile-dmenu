@@ -329,9 +329,11 @@
                    '(xdg-surface-ack-configure))
 
 (let ((received #f))
-  (let ((completing-read
-         (module-ref (resolve-interface '(guile-dmenu menu))
-                     'completing-read)))
+  (let* ((menu-interface (resolve-interface '(guile-dmenu menu)))
+         (completing-read (module-ref menu-interface 'completing-read))
+         (menu-max-options (module-ref menu-interface 'menu-max-options)))
+    (test-equal "default menu height is bounded"
+      10 (menu-max-options))
     (catch 'initial-input-observed
       (lambda ()
         (completing-read
