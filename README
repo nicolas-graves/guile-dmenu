@@ -116,6 +116,16 @@ integration, ~.inputrc~ compatibility, and API parity are not planned.  See
 echo "1\n2\n3" | $(guix build -f .guix/modules/guile-dmenu-package.scm)/bin/dmenu
 ```
 
+Codex can discover the same graphical question flow as an MCP tool through
+~guile-dmenu-mcp~.  Configure the installed executable as a stdio MCP server;
+the exported ~ask_questions~ tool accepts the same request object as
+~guile-dmenu-questions~ and returns both text and structured JSON results.
+
+```toml
+[mcp_servers.guile_dmenu]
+command = "/home/USER/.local/share/guile-dmenu-root/bin/guile-dmenu-mcp"
+```
+
 You'll also need
 
 for_window [app_id="wl-dmenu"] floating enable

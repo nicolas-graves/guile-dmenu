@@ -101,10 +101,12 @@
                 (let* ((bin (string-append #$output "/bin/"))
                        (dmenu (string-append bin "dmenu"))
                        (approval (string-append bin "codex-dmenu-approval"))
-                       (questions (string-append bin "guile-dmenu-questions")))
+                       (questions (string-append bin "guile-dmenu-questions"))
+                       (mcp (string-append bin "guile-dmenu-mcp")))
                   (install-file "scripts/dmenu" bin)
                   (install-file "scripts/codex-dmenu-approval" bin)
                   (install-file "scripts/guile-dmenu-questions" bin)
+                  (install-file "scripts/guile-dmenu-mcp" bin)
                   (for-each
                    (lambda (program)
                      (wrap-program program
@@ -114,7 +116,7 @@
                          ,(string-split (getenv "GUILE_LOAD_PATH") #\:))
                        `("GUILE_LOAD_COMPILED_PATH" ":" prefix
                          ,(string-split (getenv "GUILE_LOAD_COMPILED_PATH") #\:))))
-                   (list dmenu approval questions))))))))
+                   (list dmenu approval questions mcp))))))))
       (native-inputs (list guile-3.0))
       (inputs (list bash-minimal guile-3.0))
       (propagated-inputs (list guile-cairo

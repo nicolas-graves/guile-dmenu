@@ -1,0 +1,5 @@
+#!/usr/bin/env guile
+!#
+(use-modules (guile-dmenu mcp))
+
+(run-mcp-server)
