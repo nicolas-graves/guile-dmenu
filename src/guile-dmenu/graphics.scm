@@ -166,13 +166,27 @@
        options
        (iota (length options))))
 
-;; Wrap text by character count.  Unlike word-only wrappers this also breaks
-;; commands, paths, and serialized inputs that contain no whitespace.
+;; Wrap text at word boundaries when possible, while still breaking commands,
+;; paths, and serialized inputs that contain no whitespace.
 (define* (wrap-message-lines message columns #:optional (maximum 12))
   (define (chunks s)
+    (define (break-position)
+      (let find ((position columns))
+        (cond ((zero? position) columns)
+              ((char-whitespace? (string-ref s (- position 1)))
+               (- position 1))
+              (else (find (- position 1))))))
+    (define (skip-whitespace position)
+      (if (and (< position (string-length s))
+               (char-whitespace? (string-ref s position)))
+          (skip-whitespace (+ position 1))
+          position))
     (if (<= (string-length s) columns)
         (list s)
-        (cons (substring s 0 columns) (chunks (substring s columns)))))
+        (let* ((end (break-position))
+               (next (skip-whitespace
+                      (if (= end columns) end (+ end 1)))))
+          (cons (substring s 0 end) (chunks (substring s next))))))
   (let* ((raw (append-map chunks (string-split (or message "") #\newline)))
          (truncated? (> (length raw) maximum)))
     (if truncated?
@@ -364,7 +378,7 @@
       ;; Filter row background (input line), if configured
       (when fb
         (apply cairo-set-source-rgb cr fb)
-        (cairo-rectangle cr 0 0 width row-height)
+        (cairo-rectangle cr 0 0 width (* input-row-count row-height))
         (cairo-fill cr))
 
       ;; Title/prompt badge background, if configured
@@ -462,6 +476,7 @@
                    prompt input-text selected-index
                    filtered-options max-options
                    #:key (message-lines '()) (input-enabled? #t)
+                   (scale 1)
                    (cursor-position (string-length input-text)))
   (let* ((option-line-count
           (let* ((surface (cairo-image-surface-create 'argb32 1 1))
@@ -485,7 +500,9 @@
                                   (length (input-layout prompt input-text
                                                         width padding))
                                   option-line-count))
-         (menu-buffer (next-menu-buffer cache width real-height)))
+         (buffer-width (* scale width))
+         (buffer-height (* scale real-height))
+         (menu-buffer (next-menu-buffer cache buffer-width buffer-height)))
 
     (and menu-buffer
          (let ((stride (menu-buffer-stride menu-buffer))
@@ -496,11 +513,14 @@
            (let* ((surface (cairo-image-surface-create-for-data
                             data
                             'argb32
-                            width
-                            real-height
+                            buffer-width
+                            buffer-height
                             stride))
                   (cr (cairo-create surface)))
 
+             ;; Wayland buffers use physical pixels while all menu layout is
+             ;; expressed in logical surface coordinates.
+             (cairo-scale cr scale scale)
              (draw-menu-to-cairo-context cr width real-height padding
                                          prompt input-text selected-index
                                          filtered-options max-options

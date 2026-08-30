@@ -1,0 +1,33 @@
+From 3cc802253a2bfcce3fb470c2069760cf35e85850 Mon Sep 17 00:00:00 2001
+From: Nicolas Graves <ngraves@ngraves.fr>
+Date: Sat, 29 Aug 2026 20:15:00 +0200
+Subject: [PATCH] scanner: wrap client event objects with their declared type
+
+Object arguments in client events were wrapped with the event emitter's
+interface type.  For example, wl_surface.enter's wl_output argument became a
+<wl-surface> containing the output proxy address.  Besides exposing the wrong
+API type, unwrapping it through unwrap-wl-output consequently failed.
+
+Use the object argument's interface metadata when generating its wrapper, as
+is already done for typed new_id request results.  Preserve the existing
+emitter-type fallback for object arguments that declare no interface.
+---
+ modules/wayland/scanner.scm | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/modules/wayland/scanner.scm b/modules/wayland/scanner.scm
+index 793b069..05f212e 100644
+--- a/modules/wayland/scanner.scm
++++ b/modules/wayland/scanner.scm
+@@ -344,6 +344,8 @@
+                                                        #`((ffi:pointer->string name*)))
+                                                        ((equal? atype "object")
+-                                                        #`((#,(->syntax (make-%wrap-name iname))
++                                                        #`((#,(->syntax
++                                                               (make-%wrap-name
++                                                                (or itype iname)))
+                                                             name*)))
+                                                        ((equal? atype "array")
+                                                         #`((wrap-wl-array name*)))))))
+-- 
+2.51.0

@@ -51,7 +51,7 @@
   (completing-read-result-value result))
 
 (define (draw-state prompt message-lines option-details details-visible?
-                    input-enabled? conn cache state maximum
+                    input-enabled? conn cache scale state maximum
                     comment-state comment-index)
   (let ((surface (wayland-connection-surface conn))
         (commenting? (and comment-state #t))
@@ -85,6 +85,7 @@
                                (completing-read-state-selected-index state)
                                (completing-read-state-filtered-options state)
                                maximum #:message-lines state-message-lines
+                               #:scale scale
                                #:cursor-position
                                (completing-read-state-cursor-position
                                 (if commenting? comment-state state))
@@ -163,6 +164,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                 (state (initial-state options initial-input default
                                       inherit-input-method history
                                       initial-selected-index))
+                (buffer-scale 1)
                 (read-prepared? #f)
                 (details-visible? #f)
                 (cache (make-menu-buffer-cache
@@ -172,7 +174,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                                                   (put-message events 'redraw)))))))
            (define (redraw s comment-state comment-index)
              (draw-state prompt message-lines option-details details-visible?
-                         input-enabled? conn cache s maximum
+                         input-enabled? conn cache buffer-scale s maximum
                          comment-state comment-index)
              (wl-display-flush display))
            (create-window
@@ -184,6 +186,12 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
               (unless (zero? width) (menu-width width)) #t)
             (lambda args
               (spawn-fiber (lambda () (put-message result '(window-closed))))
+              #t)
+            #:scale-callback
+            (lambda (scale)
+              (unless (= scale buffer-scale)
+                (set! buffer-scale scale)
+                (spawn-fiber (lambda () (put-message events 'redraw))))
               #t))
            ;; Send the initial empty surface commit before waiting for the
            ;; compositor's configure event.  Redrawing before configure is a

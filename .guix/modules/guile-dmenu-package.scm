@@ -61,7 +61,10 @@
                            "/commit/"
                            "df85dee5d4bb5d55685944ab44033c172fc582ec.patch"))
            (sha256
-            (base32 "1nfzjmf2whv4gbvialg5zrbks2am9dr1awkjn6yk2ny6awp35kx9")))))))))
+            (base32 "1nfzjmf2whv4gbvialg5zrbks2am9dr1awkjn6yk2ny6awp35kx9")))
+         (local-file
+          (string-append (dirname (current-filename))
+                         "/../patches/guile-wayland-client-event-object-type.patch"))))))))
 
 (define next
   (package-input-rewriting/spec
