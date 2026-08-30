@@ -6,6 +6,16 @@ This repository provides a Guile library and client program inspired by dmenu.
 It includes a graphical, Emacs-shaped ~completing-read~ procedure as well as a
 Wayland dmenu client.
 
+Performance benchmarks
+----------------------
+
+Run ``script/benchmark`` to measure deterministic input ingestion, menu-state
+construction, per-keystroke filtering, and compositor-free rendering.  The
+suite uses ``guile-performance-harness`` from the sibling checkout by default;
+set ``GUILE_PERFORMANCE_HARNESS_DIR`` to use another checkout.  Results report
+median, p95, MAD/noise, allocation, and GC metrics.  Wayland transaction and
+lifecycle costs intentionally remain in guile-river's benchmark suite.
+
 Structured questions can now drive real graphical sessions through
 ~(guile-dmenu structured-prompt)~:
 

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+shared_dir=${GUILE_PERFORMANCE_HARNESS_DIR:-$project_dir/../guile-performance-harness}
+
+guix shell -L "$project_dir/.guix/modules" -L "$shared_dir/.guix/modules" \
+  guile-dmenu guile-performance-harness guile-ares-rs -- \
+  guile --no-auto-compile -L "$project_dir/src" -L "$project_dir" \
+  -L "$shared_dir/modules" "$project_dir/benchmarks/run.scm"
