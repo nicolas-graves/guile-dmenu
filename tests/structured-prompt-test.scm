@@ -38,8 +38,8 @@
     (not (list-ref (car calls) 3)))
   (test-equal "recommended option is highlighted initially"
     1 (list-ref (car calls) 4))
-  (test-assert "adapter keeps descriptions with their option rows"
-    (string-contains (car (cadr (car calls))) "Check first"))
+  (test-assert "adapter keeps option rows concise"
+    (not (string-contains (car (cadr (car calls))) "Check first")))
   (test-equal "adapter supplies descriptions as expandable option details"
     '("Check first" #f) (list-ref (car calls) 6))
   (test-assert "adapter enables the Codex-style Tab comment workflow"

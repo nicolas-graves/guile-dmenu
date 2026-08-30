@@ -67,7 +67,11 @@
                     ;; while the editor is active.
                     (if (pair? message-lines) (cdr message-lines) '()))
               message-lines)
-          (if (and details-visible? (pair? option-details))
+          ;; Read-only structured menus keep the selected option's description
+          ;; visible.  Editable completion menus retain the explicit details
+          ;; toggle so ordinary dmenu rows stay compact.
+          (if (and (or details-visible? (not input-enabled?))
+                   (pair? option-details))
               (let* ((index (completing-read-state-selected-index state))
                      (detail (and (< index (length option-details))
                                   (list-ref option-details index))))

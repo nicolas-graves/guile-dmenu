@@ -1,6 +1,8 @@
 (define-module (guile-dmenu mcp)
   #:use-module (ice-9 exceptions)
+  #:use-module (ice-9 hash-table)
   #:use-module (ice-9 rdelim)
+  #:use-module (ice-9 threads)
   #:use-module (json)
   #:export (mcp-question-handler
             handle-mcp-message
@@ -110,16 +112,59 @@
 (define* (run-mcp-server #:optional
                          (input (current-input-port))
                          (output (current-output-port)))
-  "Serve newline-delimited MCP JSON-RPC on INPUT and OUTPUT."
+  "Serve newline-delimited MCP JSON-RPC on INPUT and OUTPUT.
+Tool calls run on worker threads so a cancelled graphical prompt cannot block
+protocol messages or later questions."
+  (define output-lock (make-mutex))
+  (define workers-lock (make-mutex))
+  (define workers (make-hash-table))
+  (define (send response)
+    (with-mutex output-lock
+      (scm->json response output)
+      (newline output)
+      (force-output output)))
+  (define (cancel-worker! id)
+    (let ((worker
+           (with-mutex workers-lock
+             (let ((value (hash-ref workers id #f)))
+               (when value (hash-remove! workers id))
+               value))))
+      (when worker (cancel-thread worker))))
+  (define (start-tool-call! id message)
+    (let ((worker
+           (call-with-new-thread
+            (lambda ()
+              (dynamic-wind
+                (lambda () #t)
+                (lambda ()
+                  (let ((response
+                         (catch #t
+                           (lambda () (handle-mcp-message message))
+                           (lambda args
+                             (error-result id -32603 "tool call failed")))))
+                    (when response (send response))))
+                (lambda ()
+                  (with-mutex workers-lock
+                    (hash-remove! workers id))))))))
+      (with-mutex workers-lock (hash-set! workers id worker))))
   (let loop ((line (read-line input)))
     (unless (eof-object? line)
       (unless (string-null? line)
-        (let ((response
+        (let ((message
                (catch #t
-                 (lambda () (handle-mcp-message (json-string->scm line)))
-                 (lambda args (error-result #f -32700 "invalid request")))))
-          (when response
-            (scm->json response output)
-            (newline output)
-            (force-output output))))
+                 (lambda () (json-string->scm line))
+                 (lambda args #f))))
+          (if (not message)
+              (send (error-result #f -32700 "invalid request"))
+              (let ((method (field message "method"))
+                    (id (field message "id")))
+                (cond
+                 ((equal? method "tools/call")
+                  (start-tool-call! id message))
+                 ((equal? method "notifications/cancelled")
+                  (cancel-worker! (field (field message "params")
+                                         "requestId")))
+                 (else
+                  (let ((response (handle-mcp-message message)))
+                    (when response (send response)))))))))
       (loop (read-line input)))))

@@ -54,10 +54,7 @@
 (define (option-display option)
   (string-append
    (question-option-label option)
-   (if (question-option-recommended? option) " (Recommended)" "")
-   (if (question-option-description option)
-       (string-append " — " (question-option-description option))
-       "")))
+   (if (question-option-recommended? option) " (Recommended)" "")))
 
 (define (question-message question page total context)
   (string-join
