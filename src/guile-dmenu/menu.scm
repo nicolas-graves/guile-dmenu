@@ -161,9 +161,15 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
              option-details))
     (run-fibers
      (lambda ()
-       (let ((session (make-keyboard-session))
-             (events (make-channel))
-             (result (make-channel)))
+       ;; Startup runs inside the scheduler's main fiber.  An uncaught
+       ;; exception there only terminates that fiber; RUN-FIBERS can continue
+       ;; waiting on the scheduler indefinitely.  Convert startup failures to
+       ;; the same terminal result used by event-loop failures.
+       (catch #t
+         (lambda ()
+           (let ((session (make-keyboard-session))
+                 (events (make-channel))
+                 (result (make-channel)))
          (set-keyboard-session-key-handler!
           session (make-key-decoder session events result
                                     #:cancel-as-event? #t))
@@ -340,6 +346,9 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                (('window-closed) (terminated 'window-closed))
                (('graphical-failure) (terminated 'graphical-failure))
                (_ (terminated 'graphical-failure)))))))
+         (lambda args
+           (report-runtime-event! 'graphical-startup-failure)
+           (terminated 'graphical-failure))))
       #:parallelism 1
       #:drain? #f))))
 
