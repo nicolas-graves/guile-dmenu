@@ -15,60 +15,8 @@
   #:use-module (gnu packages gtk)
   #:use-module (guile-wayland packages guile-wayland)
   #:use-module (guile-wayland packages guile-xyz)
+  #:use-module (growl-at packages)
   #:use-module (git))
-
-(define-public guile-bytestructure-class-next
-  ((package-input-rewriting/spec
-    `(("guile" . ,(const guile-next))))
-   (package/inherit guile-bytestructure-class
-     (source
-      (origin
-        (inherit (package-source guile-bytestructure-class))
-        (patches
-         (list
-          (origin
-            (method url-fetch)
-            (uri
-             (string-append "https://github.com/Z572/guile-bytestructure-class"
-                            "/commit/"
-                            "87a2c7cd02305e4020be8226988128eff81d6ae4.patch"))
-            (sha256
-             (base32 "17mp7243djdslhimk3dps9svsjy5n2m28h9w9abjl2bp9z15xnak")))))))
-     (arguments
-      ;; XXX: guile-next breaks one test.
-      (list #:tests? #f
-            #:make-flags #~'("GUILE_AUTO_COMPILE=0"))))))
-
-(define-public guile-wayland-next
-  ((package-input-rewriting/spec
-    `(("guile" . ,(const guile-next))
-      ("guile-bytestructure-class"
-       . ,(const guile-bytestructure-class-next))))
-   (package/inherit guile-wayland
-     (source
-      (origin
-        (inherit (package-source guile-wayland))
-        (patches
-         (list
-          (origin
-            (method url-fetch)
-            (uri
-             (string-append "https://github.com/guile-wayland/guile-wayland"
-                            "/commit/"
-                            "cbc3e344a85fc243734d68d20a4013b55ed9596b.patch"))
-            (sha256
-             (base32 "1wlbkb6xphjlj7br5rzjl2cjjs5gky7fh224fm94gncgqdg3d1pc")))
-          (origin
-            (method url-fetch)
-            (uri
-             (string-append "https://github.com/guile-wayland/guile-wayland"
-                            "/commit/"
-                            "df85dee5d4bb5d55685944ab44033c172fc582ec.patch"))
-            (sha256
-             (base32 "1nfzjmf2whv4gbvialg5zrbks2am9dr1awkjn6yk2ny6awp35kx9")))
-          (local-file
-           (string-append (dirname (current-filename))
-                          "/../patches/guile-wayland-client-event-object-type.patch")))))))))
 
 ;; G-Golf is Guile-facing, but its test-only native inputs include GTK and an
 ;; X server.  Letting the broad Guile replacement recurse through those inputs
@@ -79,22 +27,22 @@
   (package/inherit guile-lib
     (inputs
      (modify-inputs (package-inputs guile-lib)
-       (replace "guile" guile-next)))
+       (replace "guile" guile-3.0-latest)))
     (native-inputs
      (modify-inputs (package-native-inputs guile-lib)
-       (replace "guile" guile-next)))))
+       (replace "guile" guile-3.0-latest)))))
 
 (define-public guile-g-golf-next
   (package/inherit guile-g-golf
     (inputs
      (modify-inputs (package-inputs guile-g-golf)
-       (replace "guile" guile-next)
+       (replace "guile" guile-3.0-latest)
        (replace "guile-lib" guile-lib-next)))))
 
 (define next
   (package-input-rewriting/spec
    `(("guile-g-golf" . ,(const guile-g-golf-next))
-     ("guile" . ,(const guile-next))
+     ("guile" . ,(const guile-3.0-latest))
      ("guile-bytestructure-class" . ,(const guile-bytestructure-class-next))
      ("guile-wayland" . ,(const guile-wayland-next))
      ;; Don't try to rebuild those.
@@ -169,6 +117,6 @@ completing-read procedure.")
   ("shell" (concatenate-manifests
             (list (package->development-manifest (next guile-dmenu))
                   (packages->manifest
-                   (list guile-next
+                   (list guile-3.0-latest
                          guile-ares-rs
                          guile-bytestructure-class-next))))))
