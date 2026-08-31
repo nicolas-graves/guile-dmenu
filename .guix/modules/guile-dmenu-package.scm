@@ -40,31 +40,35 @@
             #:make-flags #~'("GUILE_AUTO_COMPILE=0"))))))
 
 (define-public guile-wayland-next
-  (package/inherit guile-wayland
-    (source
-     (origin
-       (inherit (package-source guile-wayland))
-       (patches
-        (list
-         (origin
-           (method url-fetch)
-           (uri
-            (string-append "https://github.com/guile-wayland/guile-wayland"
-                           "/commit/"
-                           "cbc3e344a85fc243734d68d20a4013b55ed9596b.patch"))
-           (sha256
-            (base32 "1wlbkb6xphjlj7br5rzjl2cjjs5gky7fh224fm94gncgqdg3d1pc")))
-         (origin
-           (method url-fetch)
-           (uri
-            (string-append "https://github.com/guile-wayland/guile-wayland"
-                           "/commit/"
-                           "df85dee5d4bb5d55685944ab44033c172fc582ec.patch"))
-           (sha256
-            (base32 "1nfzjmf2whv4gbvialg5zrbks2am9dr1awkjn6yk2ny6awp35kx9")))
-         (local-file
-          (string-append (dirname (current-filename))
-                         "/../patches/guile-wayland-client-event-object-type.patch"))))))))
+  ((package-input-rewriting/spec
+    `(("guile" . ,(const guile-next))
+      ("guile-bytestructure-class"
+       . ,(const guile-bytestructure-class-next))))
+   (package/inherit guile-wayland
+     (source
+      (origin
+        (inherit (package-source guile-wayland))
+        (patches
+         (list
+          (origin
+            (method url-fetch)
+            (uri
+             (string-append "https://github.com/guile-wayland/guile-wayland"
+                            "/commit/"
+                            "cbc3e344a85fc243734d68d20a4013b55ed9596b.patch"))
+            (sha256
+             (base32 "1wlbkb6xphjlj7br5rzjl2cjjs5gky7fh224fm94gncgqdg3d1pc")))
+          (origin
+            (method url-fetch)
+            (uri
+             (string-append "https://github.com/guile-wayland/guile-wayland"
+                            "/commit/"
+                            "df85dee5d4bb5d55685944ab44033c172fc582ec.patch"))
+            (sha256
+             (base32 "1nfzjmf2whv4gbvialg5zrbks2am9dr1awkjn6yk2ny6awp35kx9")))
+          (local-file
+           (string-append (dirname (current-filename))
+                          "/../patches/guile-wayland-client-event-object-type.patch")))))))))
 
 ;; G-Golf is Guile-facing, but its test-only native inputs include GTK and an
 ;; X server.  Letting the broad Guile replacement recurse through those inputs
