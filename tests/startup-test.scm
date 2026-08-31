@@ -16,4 +16,20 @@
   (test-assert "trace includes an externally comparable clock"
     (string-contains output "monotonic_seconds=")))
 
+(let ((output
+       (dynamic-wind
+         (lambda ()
+           (setenv "GUILE_DMENU_MCP_TRACE" "stderr")
+           (setenv "GUILE_DMENU_MCP_REQUEST_ID" "42"))
+         (lambda ()
+           (with-error-to-string
+             (lambda () (report-runtime-event! 'keyboard-ready))))
+         (lambda ()
+           (unsetenv "GUILE_DMENU_MCP_TRACE")
+           (unsetenv "GUILE_DMENU_MCP_REQUEST_ID")))))
+  (test-assert "runtime tracing records a payload-free child milestone"
+    (and (string-contains output "\"event\":\"keyboard-ready\"")
+         (string-contains output "\"requestId\":42")
+         (not (string-contains output "prompt")))))
+
 (test-end "startup tracing")

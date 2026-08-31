@@ -194,6 +194,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
             conn "dmenu" "wl-dmenu" (menu-width)
             (lambda (data surface serial)
               (xdg-surface-ack-configure surface serial)
+              (report-runtime-event! 'surface-configured)
               (spawn-fiber (lambda () (put-message events 'redraw))) #t)
             (lambda (data toplevel width height states)
               (unless (zero? width) (menu-width width)) #t)
@@ -256,6 +257,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                                           '(answered back)
                                           '(cancelled)))))
                     ('select
+                     (report-runtime-event! 'select-received)
                      (if comment-state
                          (let ((text (completing-read-state-input-text
                                       comment-state)))
@@ -316,6 +318,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                             (begin (redraw n #f #f) (loop n #f #f))))
                        (_ (loop s comment-state comment-index))))))))
                 (lambda args
+                  (report-runtime-event! 'event-loop-failure)
                   (put-message result '(graphical-failure))))))
            (let ((answer
                   (perform-operation
@@ -325,6 +328,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                         (wrap-operation (sleep-operation timeout)
                                         (lambda () '(timed-out))))
                        (get-operation result)))))
+             (report-runtime-event! 'result-received)
              (when read-prepared?
                (wl-display-cancel-read display)
                (set! read-prepared? #f))

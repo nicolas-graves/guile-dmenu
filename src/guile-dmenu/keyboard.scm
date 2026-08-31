@@ -1,5 +1,6 @@
 (define-module (guile-dmenu keyboard)
   #:use-module (guile-dmenu memory-utils)
+  #:use-module (guile-dmenu startup)
   #:use-module (wayland client protocol wayland)
   #:use-module (oop goops)
   #:use-module (ice-9 format)
@@ -69,6 +70,7 @@
               (km (xkb-keymap-new ctx keymap-string)))
          (munmap data)
          (set-keyboard-session-keymap-state! session (make-keymap-state ctx km (xkb-state-new km)))
+         (report-runtime-event! 'keyboard-ready)
          (spawn-fiber
           (lambda ()
             (let loop ((repeat-key #f) (first-repeat? #f))
@@ -176,7 +178,10 @@
 (define* (make-key-decoder session app-channel exit-channel
                            #:key (cancel-as-event? #f))
   (lambda (key)
-    (let* ((xkb-key (+ 8 key))
+    (catch #t
+      (lambda ()
+       (report-runtime-event! 'key-pressed)
+       (let* ((xkb-key (+ 8 key))
            (xkb-state (keymap-state-xkb-state (keyboard-session-keymap-state session)))
            (keysym (xkb-state-key-get-one-sym xkb-state xkb-key))
            (ctrl-pressed (not (zero? (logand (xkb-state-mod-name-is-active
@@ -252,4 +257,10 @@
           (let ((utf32 (xkb-state-key-get-utf32 xkb-state xkb-key)))
             (when (unicode-scalar-value? utf32)
               (put-message app-channel `(input-char ,(integer->char utf32))))))))
-      #t)))
+         #t))
+      (lambda args
+        ;; Decoder failures used to kill the keyboard fiber silently, leaving
+        ;; a visible dialog that could never produce a terminal result.
+        (report-runtime-event! 'keyboard-failure)
+        (put-message exit-channel '(graphical-failure))
+        #f))))

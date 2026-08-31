@@ -144,6 +144,10 @@ Return an exit status; the command wrapper performs the hard process exit."
         (unless (valid-timeout? arguments)
           (error "question timeout exceeds MCP maximum"))
         (trace-event "child" "graphical-start" request-id (getpid))
+        (setenv "GUILE_DMENU_MCP_REQUEST_ID"
+                (if (number? request-id)
+                    (number->string request-id)
+                    "null"))
         (let ((answer ((mcp-question-handler) arguments)))
           (trace-event "child" "graphical-terminal" request-id (getpid)
                        (cons 'status (field answer "status")))
