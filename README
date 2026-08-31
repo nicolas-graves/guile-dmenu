@@ -124,18 +124,39 @@ the exported ~ask_questions~ tool accepts the same request object as
 ```toml
 [mcp_servers.guile_dmenu]
 command = "/home/USER/.local/share/guile-dmenu-root/bin/guile-dmenu-mcp"
+env_vars = ["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DISPLAY"]
 tool_timeout_sec = 300
 ```
+
+The environment allowlist is required when Codex does not otherwise forward
+the graphical session environment to stdio MCP servers.  ~WAYLAND_DISPLAY~ and
+~XDG_RUNTIME_DIR~ identify the active Wayland socket; ~DISPLAY~ retains the X11
+fallback used by some desktop components.  Use ~env_vars~ rather than copying
+their current values into ~env~, so a new login or compositor restart can
+supply its new display and runtime-directory values.
 
 MCP dialog timeouts are limited to 240 seconds.  The larger Codex tool timeout
 leaves one minute for response delivery and process cleanup.  Each graphical
 request runs in a one-shot child process; the persistent MCP server remains
 available for pings, cancellation, and subsequent questions.
 
+Wayland setup and event processing run inside Guile Fibers.  A connection or
+startup exception is converted to a terminal ~graphical-failure~ result; it
+does not leave the question worker waiting on an orphaned result channel.  The
+parent also enforces the request deadline, terminates and reaps a stuck child,
+and suppresses late responses after cancellation.
+
 For payload-free lifecycle diagnostics, set ~GUILE_DMENU_MCP_TRACE=stderr~ or
 set it to a file path.  Trace records contain request IDs, process IDs,
 terminal statuses, response flushes, cancellation, and cleanup, but never
 prompts, options, context, or answers.
+
+If a call returns ~graphical-failure~, first confirm that Codex was restarted
+after changing ~config.toml~, then check that ~$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY~
+exists in the graphical login session.  A trace that reaches
+~graphical-startup-failure~ identifies a local UI startup failure; a trace that
+reaches child and parent ~response-flushed~ plus ~cleanup~ confirms that MCP
+delivery and worker teardown completed.
 
 To isolate a graphical server failure from a Codex connector failure, run the
 live stdio control probe and select either displayed option:
