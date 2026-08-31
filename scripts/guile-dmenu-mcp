@@ -2,4 +2,9 @@
 !#
 (use-modules (guile-dmenu mcp))
 
-(run-mcp-server)
+(if (equal? (cdr (command-line)) '("--question-worker"))
+    ;; Hard exit prevents lingering Fibers or foreign callbacks from extending
+    ;; this one-shot worker's lifetime after its response has been flushed.
+    (primitive-exit (run-question-worker (current-input-port)
+                                         (current-output-port)))
+    (run-mcp-server #:worker-command (car (command-line))))

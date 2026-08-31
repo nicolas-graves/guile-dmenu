@@ -33,20 +33,22 @@ mkfifo "$probe_dir/input" "$probe_dir/output"
 exec 3<>"$probe_dir/input"
 exec 4<>"$probe_dir/output"
 
-"$mcp" 3>&- 4>&- \
+GUILE_DMENU_MCP_TRACE="$probe_dir/trace" "$mcp" 3>&- 4>&- \
   <"$probe_dir/input" >"$probe_dir/output" 2>"$probe_dir/stderr" &
 server_pid=$!
+ps -o pid,ppid,nlwp,stat,args -p "$server_pid" >"$probe_dir/process-before" \
+  2>&1 || true
 
-# Give transport teardown a small margin beyond the menu's own timeout.
-outer_timeout=$((probe_timeout + 5))
+# The response deadline is independent from the later server teardown limit.
+response_timeout=$((probe_timeout + 2))
 (
-  sleep "$outer_timeout"
-  kill "$server_pid" 2>/dev/null || true
+  sleep "$response_timeout"
+  kill -KILL "$server_pid" 2>/dev/null || true
   # The parent holds the FIFO open read/write, so killing the server cannot
   # produce EOF by itself.  Wake the blocked reader explicitly.
   printf '\n' >&4
 ) &
-watchdog_pid=$!
+response_watchdog_pid=$!
 
 printf '%s\n' \
   "{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_questions\",\"arguments\":{\"timeout\":$probe_timeout,\"questions\":[{\"id\":\"probe\",\"prompt\":\"Direct MCP transport probe\",\"options\":[{\"id\":\"one\",\"label\":\"First\"},{\"id\":\"two\",\"label\":\"Second\"}]}]}}}" >&3
@@ -55,18 +57,49 @@ response=
 IFS= read -r response <&4 || true
 printf '%s\n' "$response" >"$probe_dir/response"
 
-kill "$watchdog_pid" 2>/dev/null || true
-wait "$watchdog_pid" 2>/dev/null || true
+kill "$response_watchdog_pid" 2>/dev/null || true
+wait "$response_watchdog_pid" 2>/dev/null || true
+ps -o pid,ppid,nlwp,stat,args -p "$server_pid" --ppid "$server_pid" \
+  >"$probe_dir/process-after-response" 2>&1 || true
 exec 3>&-
-wait "$server_pid" 2>/dev/null || true
 
-case $response in
-  *'"jsonrpc":"2.0"'*'"id":77'*'"status":"answered"'*)
+# Once stdin closes, allow a separate bounded interval for child cleanup and
+# parent teardown.  Escalate so this diagnostic command itself cannot hang.
+(
+  sleep 5
+  kill "$server_pid" 2>/dev/null || true
+  sleep 1
+  kill -KILL "$server_pid" 2>/dev/null || true
+) &
+teardown_watchdog_pid=$!
+server_status=0
+wait "$server_pid" 2>/dev/null || server_status=$?
+kill "$teardown_watchdog_pid" 2>/dev/null || true
+wait "$teardown_watchdog_pid" 2>/dev/null || true
+printf '%s\n' "$server_status" >"$probe_dir/server-status"
+
+status=$(guile -c '
+  (use-modules (json))
+  (define (field object name)
+    (let ((entry (or (assoc name object)
+                     (assoc (string->symbol name) object))))
+      (and entry (cdr entry))))
+  (let* ((value (call-with-input-file (cadr (command-line)) json->scm))
+         (result (field value "result"))
+         (structured (and result (field result "structuredContent")))
+         (status (and structured (field structured "status"))))
+    (when (and (equal? (field value "jsonrpc") "2.0")
+               (equal? (field value "id") 77)
+               (member status (quote ("answered" "timed-out"))))
+      (display status)))' "$probe_dir/response" 2>/dev/null || true)
+
+case $status in
+  answered)
     printf '%s\n' 'PASS: guile-dmenu returned the selected answer over raw MCP stdio.'
     printf '%s\n' 'This validates the server/control path only; it does not exercise Codex.'
     rm -rf "$probe_dir"
     ;;
-  *'"jsonrpc":"2.0"'*'"id":77'*'"status":"timed-out"'*)
+  timed-out)
     printf '%s\n' 'PASS: guile-dmenu returned its timeout over raw MCP stdio.'
     printf '%s\n' 'This validates the server/control path only; it does not exercise Codex.'
     rm -rf "$probe_dir"

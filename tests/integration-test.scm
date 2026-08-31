@@ -1,10 +1,12 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
 
 (use-modules (river test-support)
+             (ice-9 ftw)
              (ice-9 match)
              (ice-9 rdelim)
              (ice-9 textual-ports)
              (srfi srfi-1)
+             (srfi srfi-13)
              (srfi srfi-64))
 
 (define river-dir (or (getenv "GUILE_RIVER_DIR")
@@ -94,6 +96,16 @@
           (('window-configured _ 640 height) (> height 0))
           (_ #f))
         events))
+
+(define (process-children pid)
+  (let ((path (format #f "/proc/~a/task/~a/children" pid pid)))
+    (if (file-exists? path)
+        (string-trim-both (call-with-input-file path get-string-all))
+        "")))
+
+(define (process-thread-count pid)
+  (length (filter (lambda (name) (string-every char-numeric? name))
+                  (scandir (format #f "/proc/~a/task" pid)))))
 
 (define (run-smoke session)
   (eventually "test manager readiness"
@@ -224,6 +236,7 @@
       (test-equal "choice comment emitted no diagnostics" "" stderr)))
   (let* ((event-count (length (read-river-manager-events session)))
          (client (start-mcp session))
+         (initial-thread-count (process-thread-count (car client)))
          (request
           (string-append
            "{\"jsonrpc\":\"2.0\",\"id\":41,\"method\":\"tools/call\","
@@ -241,6 +254,64 @@
                    (drop (read-river-manager-events session) event-count))))
     (river-session-wtype session "-s" "100" "-k" "Down" "-k" "Return")
     (let ((response (read-line (caddr client))))
+      (test-assert "selected MCP worker is reaped"
+        (eventually "selected MCP worker cleanup"
+                    (lambda ()
+                      (string-null? (process-children (car client))))))
+      (display
+       (string-append
+        "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\","
+        "\"params\":{\"name\":\"ask_questions\",\"arguments\":{"
+        "\"timeout\":1,\"autoResolve\":true,\"questions\":[{"
+        "\"id\":\"safe\",\"prompt\":\"Safe?\",\"options\":["
+        "{\"id\":\"yes\",\"label\":\"Yes\",\"recommended\":true},"
+        "{\"id\":\"no\",\"label\":\"No\"}] }]}}}\n")
+       (cadr client))
+      (force-output (cadr client))
+      (let ((timeout-response (read-line (caddr client))))
+        (test-assert "MCP auto-resolve returns its recommended stable id"
+          (and (string-contains timeout-response "\"id\":42")
+               (string-contains timeout-response "\"answer\":\"yes\""))))
+      (let ((cancel-event-count
+             (length (read-river-manager-events session))))
+        (display
+         (string-append
+          "{\"jsonrpc\":\"2.0\",\"id\":43,\"method\":\"tools/call\","
+          "\"params\":{\"name\":\"ask_questions\",\"arguments\":{"
+          "\"timeout\":10,\"questions\":[{\"id\":\"cancel\","
+          "\"prompt\":\"Cancel?\",\"options\":["
+          "{\"id\":\"yes\",\"label\":\"Yes\"},"
+          "{\"id\":\"no\",\"label\":\"No\"}] }]}}}\n")
+         (cadr client))
+        (force-output (cadr client))
+        (eventually "cancelled MCP window was configured"
+                    (lambda ()
+                      (configured-event
+                       (drop (read-river-manager-events session)
+                             cancel-event-count))))
+        (display
+         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":43}}\n"
+         (cadr client))
+        (display
+         (string-append
+          "{\"jsonrpc\":\"2.0\",\"id\":44,\"method\":\"tools/call\","
+          "\"params\":{\"name\":\"ask_questions\",\"arguments\":{"
+          "\"timeout\":1,\"questions\":[{\"id\":\"next\","
+          "\"prompt\":\"Next?\",\"options\":["
+          "{\"id\":\"one\",\"label\":\"One\"},"
+          "{\"id\":\"two\",\"label\":\"Two\"}] }]}}}\n")
+         (cadr client))
+        (force-output (cadr client))
+        (let ((second-response (read-line (caddr client))))
+          (test-assert "a request after cancellation completes normally"
+            (and (string-contains second-response "\"id\":44")
+                 (not (string-contains second-response "\"id\":43"))))))
+      (test-assert "MCP requests leave no child and restore thread count"
+        (eventually "MCP lifecycle cleanup"
+                    (lambda ()
+                      (and (string-null? (process-children (car client)))
+                           (= initial-thread-count
+                              (process-thread-count (car client)))))))
       (close-port (cadr client))
       (let ((status (cdr (waitpid (car client))))
             (stderr (get-string-all (cadddr client))))
