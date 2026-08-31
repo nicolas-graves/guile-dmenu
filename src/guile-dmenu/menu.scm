@@ -213,7 +213,12 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
            (wl-display-flush display)
            (spawn-fiber
             (lambda ()
-              (let loop ((s state) (comment-state #f) (comment-index #f))
+              ;; A callback or drawing failure must wake the result waiter.
+              ;; Otherwise this fiber can disappear while the main fiber (and
+              ;; therefore the MCP question worker) remains blocked forever.
+              (catch #t
+                (lambda ()
+                 (let loop ((s state) (comment-state #f) (comment-index #f))
                 ;; Drain callbacks already queued by libwayland, then prepare
                 ;; exactly one nonblocking socket read.  If another fiber's
                 ;; event wins the race below, cancel that prepared read.
@@ -309,7 +314,9 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                             (begin (redraw s n comment-index)
                                    (loop s n comment-index))
                             (begin (redraw n #f #f) (loop n #f #f))))
-                       (_ (loop s comment-state comment-index)))))))))
+                       (_ (loop s comment-state comment-index))))))))
+                (lambda args
+                  (put-message result '(graphical-failure))))))
            (let ((answer
                   (perform-operation
                    (if timeout

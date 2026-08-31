@@ -94,6 +94,18 @@
   (test-equal "worker timeout is returned as a terminal result"
     "timed-out" (field payload "status")))
 
+(let* ((output (open-output-string))
+       (server (start-test-server output)))
+  (display
+   "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_questions\",\"arguments\":{\"context\":\"sleep\",\"timeout\":0.05}}}\n"
+   (car server))
+  (force-output (car server))
+  (test-assert "parent watchdog terminates a stuck graphical worker"
+    (eventually (lambda ()
+                  (string-contains (get-output-string output)
+                                   "\"status\":\"timed-out\""))))
+  (stop-test-server server))
+
 (let ((trace (format #f "/tmp/guile-dmenu-mcp-trace-~a" (getpid))))
   (when (file-exists? trace) (delete-file trace))
   (parameterize ((mcp-trace-destination trace))

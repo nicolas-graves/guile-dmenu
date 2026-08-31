@@ -9,6 +9,7 @@
             run-question-worker run-mcp-server))
 
 (define %maximum-question-timeout 240)
+(define %worker-timeout-cleanup-margin 1)
 
 (define (field object name)
   (let ((entry (and (list? object)
@@ -126,7 +127,14 @@
 Return an exit status; the command wrapper performs the hard process exit."
   (catch #t
     (lambda ()
-      (let ((arguments (json->scm input)))
+      (let* ((payload (json->scm input))
+             (request-id (field payload "__mcpRequestId"))
+             (arguments (filter (lambda (entry)
+                                  (not (member (car entry)
+                                               '("__mcpRequestId"
+                                                 __mcpRequestId))))
+                                payload)))
+        (trace-event "child" "request-read" request-id (getpid))
         (let trailing ()
           (let ((character (read-char input)))
             (unless (eof-object? character)
@@ -135,9 +143,14 @@ Return an exit status; the command wrapper performs the hard process exit."
                   (error "trailing worker input")))))
         (unless (valid-timeout? arguments)
           (error "question timeout exceeds MCP maximum"))
-        (scm->json ((mcp-question-handler) arguments) output)
+        (trace-event "child" "graphical-start" request-id (getpid))
+        (let ((answer ((mcp-question-handler) arguments)))
+          (trace-event "child" "graphical-terminal" request-id (getpid)
+                       (cons 'status (field answer "status")))
+          (scm->json answer output))
         (newline output)
         (force-output output)
+        (trace-event "child" "response-flushed" request-id (getpid))
         0))
     (lambda args
       ;; Exception details can contain request payloads, so keep this generic.
@@ -173,7 +186,7 @@ Return an exit status; the command wrapper performs the hard process exit."
             (unless (equal? destination "stderr") (close-port port))))
         (lambda args #f)))))
 
-(define (spawn-question-worker command arguments)
+(define (spawn-question-worker command id arguments)
   (let* ((argv (if (list? command) command (list command)))
          (program (car argv))
          (arguments* (append (cdr argv) '("--question-worker")))
@@ -187,7 +200,7 @@ Return an exit status; the command wrapper performs the hard process exit."
       (lambda (input output pid)
         (catch #t
           (lambda ()
-            (scm->json arguments output)
+            (scm->json (acons '__mcpRequestId id arguments) output)
             (newline output)
             (force-output output)
             (close-port output)
@@ -278,6 +291,43 @@ cannot keep the persistent protocol server from completing requests."
           (lambda () (kill (worker-pid worker) SIGKILL))
           (lambda args #f))
         (join-thread (worker-thread worker)))))
+  (define (expire-worker! id worker)
+    ;; This watchdog runs as an ordinary Guile thread, independently of the
+    ;; graphical Fibers scheduler.  It is a final lifecycle boundary for a
+    ;; child whose event loop or in-dialog timer has stopped making progress.
+    (let ((expired?
+           (with-mutex workers-lock
+             (and (eq? (hash-ref workers id #f) worker)
+                  (not (worker-cancelled? worker))
+                  (begin
+                    (set-worker-cancelled?! worker #t)
+                    (hash-remove! workers id)
+                    #t)))))
+      (when expired?
+        (trace-event "parent" "worker-deadline" id (worker-pid worker))
+        (catch 'system-error
+          (lambda () (kill (worker-pid worker) SIGKILL))
+          (lambda args #f))
+        (join-thread (worker-thread worker))
+        (send (result id (tool-result '((status . "timed-out")))) id))))
+  (define (watch-worker-deadline! id worker timeout)
+    ;; Polling lets this short-lived watchdog leave promptly after ordinary
+    ;; completion instead of leaking a sleeping thread for the full dialog
+    ;; timeout.
+    (let ((deadline (+ (get-internal-real-time)
+                       (* (+ timeout %worker-timeout-cleanup-margin)
+                          internal-time-units-per-second))))
+      (let loop ()
+        (when (with-mutex workers-lock
+                (eq? (hash-ref workers id #f) worker))
+          (let ((remaining (/ (- deadline (get-internal-real-time))
+                              internal-time-units-per-second)))
+            (if (positive? remaining)
+                (begin
+                  (usleep (inexact->exact
+                           (round (* (min remaining 0.1) 1000000))))
+                  (loop))
+                (expire-worker! id worker)))))))
   (define (start-tool-call! id message)
     (let* ((params (field message "params"))
            (arguments (or (field params "arguments") '())))
@@ -291,14 +341,19 @@ cannot keep the persistent protocol server from completing requests."
         (let ((worker #f))
           (catch #t
             (lambda ()
-              (set! worker (spawn-question-worker worker-command arguments))
+              (set! worker (spawn-question-worker worker-command id arguments))
               (trace-event "parent" "worker-started" id (worker-pid worker))
               ;; Fast cleanup cannot overtake registration while this lock is held.
               (with-mutex workers-lock
                 (let ((thread (call-with-new-thread
                                (lambda () (read-worker-response id worker)))))
                   (set-worker-thread! worker thread)
-                  (hash-set! workers id worker))))
+                  (hash-set! workers id worker)))
+              (let ((timeout (field arguments "timeout")))
+                (when timeout
+                  (call-with-new-thread
+                   (lambda ()
+                     (watch-worker-deadline! id worker timeout))))))
             (lambda args
               ;; If thread creation or registration failed after spawning,
               ;; terminate and reap the otherwise unowned child here.
