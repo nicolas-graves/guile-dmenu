@@ -131,22 +131,25 @@ protocol messages or later questions."
                value))))
       (when worker (cancel-thread worker))))
   (define (start-tool-call! id message)
-    (let ((worker
-           (call-with-new-thread
-            (lambda ()
-              (dynamic-wind
-                (lambda () #t)
-                (lambda ()
-                  (let ((response
-                         (catch #t
-                           (lambda () (handle-mcp-message message))
-                           (lambda args
-                             (error-result id -32603 "tool call failed")))))
-                    (when response (send response))))
-                (lambda ()
-                  (with-mutex workers-lock
-                    (hash-remove! workers id))))))))
-      (with-mutex workers-lock (hash-set! workers id worker))))
+    ;; Hold the registry lock through thread creation and registration.  A
+    ;; fast worker's cleanup cannot remove itself until it has been registered.
+    (with-mutex workers-lock
+      (let ((worker
+             (call-with-new-thread
+              (lambda ()
+                (dynamic-wind
+                  (lambda () #t)
+                  (lambda ()
+                    (let ((response
+                           (catch #t
+                             (lambda () (handle-mcp-message message))
+                             (lambda args
+                               (error-result id -32603 "tool call failed")))))
+                      (when response (send response))))
+                  (lambda ()
+                    (with-mutex workers-lock
+                      (hash-remove! workers id))))))))
+        (hash-set! workers id worker))))
   (let loop ((line (read-line input)))
     (unless (eof-object? line)
       (unless (string-null? line)
@@ -167,4 +170,10 @@ protocol messages or later questions."
                  (else
                   (let ((response (handle-mcp-message message)))
                     (when response (send response)))))))))
-      (loop (read-line input)))))
+      (loop (read-line input))))
+  ;; A closed MCP stdin means teardown.  Wait for requests that have already
+  ;; reached a terminal response instead of abandoning their worker threads.
+  (for-each join-thread
+            (with-mutex workers-lock
+              (hash-map->list (lambda (id worker) worker) workers))))
+

@@ -1,4 +1,6 @@
 (use-modules (guile-dmenu mcp)
+             (srfi srfi-1)
+             (srfi srfi-13)
              (srfi srfi-64))
 
 (test-begin "dmenu MCP server")
@@ -63,5 +65,24 @@
         (string-contains text "\"id\":11"))
       (test-assert "cancelled questions emit no stale response"
         (not (string-contains text "\"id\":10"))))))
+
+;; Exercise the historical race where a fast worker removed its entry before
+;; the main thread registered it, leaving stale worker-table state behind.
+(parameterize
+    ((mcp-question-handler
+      (lambda (arguments) '((status . "answered") (answers . #())))))
+  (let* ((count 100)
+         (input
+          (string-concatenate
+           (map (lambda (id)
+                  (format #f
+                          "{\"jsonrpc\":\"2.0\",\"id\":~a,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_questions\",\"arguments\":{}}}~%"
+                          id))
+                (iota count))))
+         (output (open-output-string)))
+    (call-with-input-string input
+      (lambda (port) (run-mcp-server port output)))
+    (let ((responses (string-count (get-output-string output) #\newline)))
+      (test-equal "fast worker registration is race-free" count responses))))
 
 (test-end "dmenu MCP server")

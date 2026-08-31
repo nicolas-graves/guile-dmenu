@@ -1,0 +1,79 @@
+#!/bin/sh
+set -eu
+
+# Control probe for the guile-dmenu side of a Codex MCP hang.  This talks to
+# the stdio server directly; it cannot exercise Codex's MCP connector.
+
+mcp=${GUILE_DMENU_MCP:-}
+probe_timeout=${1:-10}
+
+if test -z "$mcp"; then
+  printf '%s\n' 'GUILE_DMENU_MCP must name an installed guile-dmenu-mcp executable' >&2
+  exit 2
+fi
+
+case $probe_timeout in
+  *[!0-9]*|'')
+    printf '%s\n' 'probe timeout must be a positive integer' >&2
+    exit 2
+    ;;
+  0)
+    printf '%s\n' 'probe timeout must be greater than zero' >&2
+    exit 2
+    ;;
+esac
+
+test -x "$mcp" || {
+  printf 'not executable: %s\n' "$mcp" >&2
+  exit 2
+}
+
+probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/guile-dmenu-mcp-probe.XXXXXX")
+mkfifo "$probe_dir/input" "$probe_dir/output"
+exec 3<>"$probe_dir/input"
+exec 4<>"$probe_dir/output"
+
+"$mcp" 3>&- 4>&- \
+  <"$probe_dir/input" >"$probe_dir/output" 2>"$probe_dir/stderr" &
+server_pid=$!
+
+# Give transport teardown a small margin beyond the menu's own timeout.
+outer_timeout=$((probe_timeout + 5))
+(
+  sleep "$outer_timeout"
+  kill "$server_pid" 2>/dev/null || true
+  # The parent holds the FIFO open read/write, so killing the server cannot
+  # produce EOF by itself.  Wake the blocked reader explicitly.
+  printf '\n' >&4
+) &
+watchdog_pid=$!
+
+printf '%s\n' \
+  "{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_questions\",\"arguments\":{\"timeout\":$probe_timeout,\"questions\":[{\"id\":\"probe\",\"prompt\":\"Direct MCP transport probe\",\"options\":[{\"id\":\"one\",\"label\":\"First\"},{\"id\":\"two\",\"label\":\"Second\"}]}]}}}" >&3
+
+response=
+IFS= read -r response <&4 || true
+printf '%s\n' "$response" >"$probe_dir/response"
+
+kill "$watchdog_pid" 2>/dev/null || true
+wait "$watchdog_pid" 2>/dev/null || true
+exec 3>&-
+wait "$server_pid" 2>/dev/null || true
+
+case $response in
+  *'"jsonrpc":"2.0"'*'"id":77'*'"status":"answered"'*)
+    printf '%s\n' 'PASS: guile-dmenu returned the selected answer over raw MCP stdio.'
+    printf '%s\n' 'This validates the server/control path only; it does not exercise Codex.'
+    rm -rf "$probe_dir"
+    ;;
+  *'"jsonrpc":"2.0"'*'"id":77'*'"status":"timed-out"'*)
+    printf '%s\n' 'PASS: guile-dmenu returned its timeout over raw MCP stdio.'
+    printf '%s\n' 'This validates the server/control path only; it does not exercise Codex.'
+    rm -rf "$probe_dir"
+    ;;
+  *)
+    printf 'FAIL: no valid terminal MCP response; diagnostics retained in %s\n' \
+      "$probe_dir" >&2
+    exit 1
+    ;;
+esac

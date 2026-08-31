@@ -126,6 +126,19 @@ the exported ~ask_questions~ tool accepts the same request object as
 command = "/home/USER/.local/share/guile-dmenu-root/bin/guile-dmenu-mcp"
 ```
 
+To isolate a graphical server failure from a Codex connector failure, run the
+live stdio control probe and select either displayed option:
+
+```bash
+GUILE_DMENU_MCP=/path/to/guile-dmenu-mcp script/mcp-live-probe
+```
+
+A pass proves that the graphical server returned a terminal JSON-RPC response
+over a long-lived stdio connection.  It does not exercise or reproduce the
+Codex-side connector path; compare it with the same ~ask_questions~ call from a
+Codex session when investigating a connector-only hang.  On failure, the probe
+retains its raw response and stderr in the reported temporary directory.
+
 You'll also need
 
 for_window [app_id="wl-dmenu"] floating enable
