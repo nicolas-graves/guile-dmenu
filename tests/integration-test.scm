@@ -2,6 +2,7 @@
 
 (use-modules (river test-support)
              (ice-9 match)
+             (ice-9 rdelim)
              (ice-9 textual-ports)
              (srfi srfi-1)
              (srfi srfi-64))
@@ -13,6 +14,9 @@
 (define questions-command
   (or (getenv "GUILE_DMENU_QUESTIONS")
       (error "GUILE_DMENU_QUESTIONS is not set")))
+(define mcp-command
+  (or (getenv "GUILE_DMENU_MCP")
+      (error "GUILE_DMENU_MCP is not set")))
 
 (define (start-dmenu session)
   (let* ((input (pipe))
@@ -62,6 +66,28 @@
           (newline (cdr input))
           (close-port (cdr input))
           (list pid (car output) (car errors))))))
+
+(define (start-mcp session)
+  (let* ((input (pipe))
+         (output (pipe))
+         (errors (pipe))
+         (pid (primitive-fork)))
+    (if (zero? pid)
+        (begin
+          (setenv "XDG_RUNTIME_DIR" (river-session-runtime-dir session))
+          (setenv "WAYLAND_DISPLAY" (river-session-display session))
+          (close-port (cdr input))
+          (close-port (car output))
+          (close-port (car errors))
+          (dup2 (fileno (car input)) 0)
+          (dup2 (fileno (cdr output)) 1)
+          (dup2 (fileno (cdr errors)) 2)
+          (execl mcp-command mcp-command))
+        (begin
+          (close-port (car input))
+          (close-port (cdr output))
+          (close-port (cdr errors))
+          (list pid (cdr input) (car output) (car errors))))))
 
 (define (configured-event events)
   (find (match-lambda
@@ -195,7 +221,38 @@
       (test-assert "choice comment retains its typed qualification"
         (string-contains stdout
                          "\"comment\":\"cover tab comments in river\""))
-      (test-equal "choice comment emitted no diagnostics" "" stderr))))
+      (test-equal "choice comment emitted no diagnostics" "" stderr)))
+  (let* ((event-count (length (read-river-manager-events session)))
+         (client (start-mcp session))
+         (request
+          (string-append
+           "{\"jsonrpc\":\"2.0\",\"id\":41,\"method\":\"tools/call\","
+           "\"params\":{\"name\":\"ask_questions\",\"arguments\":{"
+           "\"timeout\":10,\"questions\":[{\"id\":\"decision\","
+           "\"prompt\":\"Proceed?\",\"options\":["
+           "{\"id\":\"yes\",\"label\":\"Yes\"},"
+           "{\"id\":\"no\",\"label\":\"No\"}] }]}}}")))
+    (display request (cadr client))
+    (newline (cadr client))
+    (force-output (cadr client))
+    (eventually "MCP question window was configured"
+                (lambda ()
+                  (configured-event
+                   (drop (read-river-manager-events session) event-count))))
+    (river-session-wtype session "-s" "100" "-k" "Down" "-k" "Return")
+    (let ((response (read-line (caddr client))))
+      (close-port (cadr client))
+      (let ((status (cdr (waitpid (car client))))
+            (stderr (get-string-all (cadddr client))))
+        (test-equal "MCP server exits successfully after stdin closes" 0
+          (status:exit-val status))
+        (test-assert "MCP selection returns on the JSON-RPC transport"
+          (string-contains response "\"id\":41"))
+        (test-assert "MCP response contains the selected stable id"
+          (string-contains response "\"answer\":\"no\""))
+        (test-assert "MCP response contains structured content"
+          (string-contains response "\"structuredContent\""))
+        (test-equal "MCP server emitted no diagnostics" "" stderr)))))
 
 (test-begin "guile-dmenu integration")
 (call-with-headless-river-session
