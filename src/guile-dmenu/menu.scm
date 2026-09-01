@@ -76,8 +76,8 @@
                      (detail (and (< index (length option-details))
                                   (list-ref option-details index))))
                 (if detail
-                    (wrap-message-lines
-                     detail (max 20 (quotient (menu-width) 8)) 6)
+                    (wrap-message-to-width
+                     detail (menu-width) (menu-padding) 6)
                     '()))
               '())
           (if (completing-read-state-confirmation-input state)
@@ -146,9 +146,10 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
          (options (map completion-candidate-display candidates))
          (maximum (or (menu-max-options) (length options)))
          (message-lines (if message
-                            (wrap-message-lines message
-                                                (max 20 (quotient (menu-width) 8))
-                                                max-message-lines)
+                            (wrap-message-to-width message
+                                                   (menu-width)
+                                                   (menu-padding)
+                                                   max-message-lines)
                             '())))
     (report-startup-phase! 'collection-normalized)
     (unless (or (not option-details)

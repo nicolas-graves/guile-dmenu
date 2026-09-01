@@ -6,6 +6,7 @@
   #:export (default-font-pixel-size
             pango-text-size
             pango-text-width
+            pango-wrap-text
             draw-pango-text!))
 
 ;; Import the introspected Pango layout API and its Cairo rendering bridge.
@@ -51,6 +52,37 @@
 
 (define (pango-text-width cr text)
   (car (pango-text-size cr text)))
+
+(define (pango-wrap-text cr text maximum-width)
+  "Wrap TEXT to lines measured with the active Pango font."
+  (define (text-width start end)
+    (pango-text-width cr (substring text start end)))
+  (define (fit-position start)
+    (let fit ((position (+ start 1)))
+      (cond ((> position (string-length text)) (string-length text))
+            ((<= (text-width start position) maximum-width)
+             (fit (+ position 1)))
+            (else (max (+ start 1) (- position 1))))))
+  (define (break-position start fitted)
+    (let find ((position fitted))
+      (cond ((<= position start) fitted)
+            ((char-whitespace? (string-ref text (- position 1)))
+             (if (= position (+ start 1)) fitted (- position 1)))
+            (else (find (- position 1))))))
+  (define (skip-whitespace position)
+    (if (and (< position (string-length text))
+             (char-whitespace? (string-ref text position)))
+        (skip-whitespace (+ position 1))
+        position))
+  (let loop ((start 0) (lines '()))
+    (if (= start (string-length text))
+        (reverse (if (null? lines) (list "") lines))
+        (let ((fitted (fit-position start)))
+          (if (= fitted (string-length text))
+              (reverse (cons (substring text start fitted) lines))
+              (let ((end (break-position start fitted)))
+                (loop (skip-whitespace end)
+                      (cons (substring text start end) lines))))))))
 
 ;; Pango renders a layout from its top-left corner, unlike cairo-show-text,
 ;; whose current point is a baseline.  Centering by the measured layout height

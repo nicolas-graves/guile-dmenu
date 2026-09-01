@@ -406,6 +406,17 @@
   (test-assert "Pango measurement includes trailing whitespace"
     (> (pango-text-width cr "ab ")
        (pango-text-width cr "ab")))
+  (let* ((maximum-width 120)
+         (lines (pango-wrap-text
+                 cr
+                 "WWWWWWWWWWWWWWWWWWWWWWWW with measured wrapping"
+                 maximum-width)))
+    (test-assert "Pango wrapping splits text by measured width"
+      (> (length lines) 1))
+    (test-assert "every Pango-wrapped line fits its pixel boundary"
+      (every (lambda (line)
+               (<= (pango-text-width cr line) maximum-width))
+             lines)))
   (cairo-destroy cr)
   (cairo-surface-destroy surface))
 

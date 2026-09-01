@@ -13,6 +13,7 @@
   #:export (draw-menu
             draw-menu-to-cairo-context
             wrap-message-lines
+            wrap-message-to-width
             make-menu-buffer-cache
             wl-buffer-listener
             background-color
@@ -92,63 +93,45 @@
         (or option-lines (visible-item-count option-count max-options)))
      (item-height padding)))
 
-(define (available-columns width padding)
-  (max 1 (quotient (max 1 (- width (* 2 padding))) 8)))
-
-(define (wrap-text cr text maximum-width)
-  (define (text-width start end)
-    (pango-text-width cr (substring text start end)))
-  (define (fit-position start)
-    (let fit ((position (+ start 1)))
-      (cond ((> position (string-length text)) (string-length text))
-            ((<= (text-width start position) maximum-width)
-             (fit (+ position 1)))
-            (else (max (+ start 1) (- position 1))))))
-  (define (break-position start fitted)
-    (let find ((position fitted))
-      (cond ((<= position start) fitted)
-            ((char-whitespace? (string-ref text (- position 1)))
-             (if (= position (+ start 1)) fitted (- position 1)))
-            (else (find (- position 1))))))
-  (define (skip-whitespace position)
-    (if (and (< position (string-length text))
-             (char-whitespace? (string-ref text position)))
-        (skip-whitespace (+ position 1))
-        position))
-  (let loop ((start 0) (lines '()))
-    (if (= start (string-length text))
-        (reverse (if (null? lines) (list "") lines))
-        (let ((fitted (fit-position start)))
-          (if (= fitted (string-length text))
-              (reverse (cons (substring text start fitted) lines))
-              (let ((end (break-position start fitted)))
-                (loop (skip-whitespace end)
-                      (cons (substring text start end) lines))))))))
+(define (available-text-width width padding)
+  ;; The border stroke occupies the inside edge of the surface.  Keep text
+  ;; inside whichever inset is larger instead of letting it overlap a thick
+  ;; border when padding is small.
+  (max 1 (- width padding (max padding (border-width)))))
 
 ;; Return editable text rows as (START . TEXT) pairs.  The first row shares
 ;; horizontal space with the prompt; continuation rows use the full width.
-(define (input-layout prompt input-text width padding)
+(define (input-layout cr prompt input-text width padding)
   (if (not (input-line-wrapping?))
       (list (cons 0 input-text))
-      (let* ((columns (available-columns width padding))
-             (first-columns (max 1 (- columns (string-length prompt) 1)))
+      (let* ((full-width (available-text-width width padding))
+             (first-width (max 1 (- full-width
+                                    (pango-text-width cr prompt) 2)))
              (length (string-length input-text)))
-        (define (break-position start limit)
-          (let find ((position limit))
-            (cond ((<= position (+ start 1)) limit)
+        (define (fit-position start maximum-width)
+          (let fit ((position (+ start 1)))
+            (cond ((> position length) length)
+                  ((<= (pango-text-width
+                        cr (substring input-text start position))
+                       maximum-width)
+                   (fit (+ position 1)))
+                  (else (max (+ start 1) (- position 1))))))
+        (define (break-position start fitted)
+          (let find ((position fitted))
+            (cond ((<= position (+ start 1)) fitted)
                   ((char-whitespace?
                     (string-ref input-text (- position 1)))
                    position)
                   (else (find (- position 1))))))
-        (let loop ((start 0) (capacity first-columns) (rows '()))
-          (let* ((limit (min length (+ start capacity)))
-                 (end (if (= limit length)
-                          limit
-                          (break-position start limit)))
+        (let loop ((start 0) (maximum-width first-width) (rows '()))
+          (let* ((fitted (fit-position start maximum-width))
+                 (end (if (= fitted length)
+                          fitted
+                          (break-position start fitted)))
                  (next (cons (cons start (substring input-text start end)) rows)))
             (if (= end length)
                 (reverse next)
-                (loop end columns next)))))))
+                (loop end full-width next)))))))
 
 (define (option-layout cr options selected-index width padding)
   (map (lambda (option index)
@@ -157,7 +140,7 @@
                                         "")
                                     option)))
            (if (input-line-wrapping?)
-               (wrap-text cr text (max 1 (- width (* 2 padding))))
+               (pango-wrap-text cr text (available-text-width width padding))
                (list text))))
        options
        (iota (length options))))
@@ -188,6 +171,26 @@
     (if truncated?
         (append (take raw (max 0 (- maximum 1))) (list "... [truncated]"))
         raw)))
+
+;; Wrap read-only text using the same Pango metrics as the renderer.  This
+;; avoids the former fixed eight-pixels-per-character estimate, which could
+;; overflow with a wider Fontconfig monospace alias.
+(define* (wrap-message-to-width message width padding #:optional (maximum 12))
+  (let* ((surface (cairo-image-surface-create 'argb32 1 1))
+         (cr (cairo-create surface))
+         (raw (append-map
+               (lambda (line)
+                 (pango-wrap-text cr line
+                                  (available-text-width width padding)))
+               (string-split (or message "") #\newline)))
+         (truncated? (> (length raw) maximum))
+         (lines (if truncated?
+                    (append (take raw (max 0 (- maximum 1)))
+                            (list "... [truncated]"))
+                    raw)))
+    (cairo-destroy cr)
+    (cairo-surface-destroy surface)
+    lines))
 
 ;; Return the page of OPTIONS containing SELECTED-INDEX, together with the
 ;; selection index relative to that page.  Keeping this calculation in the
@@ -343,7 +346,7 @@
                                      #:key (message-lines '()) (input-enabled? #t)
                                      (cursor-position (string-length input-text)))
   (let* ((row-height (item-height padding))
-         (input-rows (input-layout prompt input-text width padding))
+         (input-rows (input-layout cr prompt input-text width padding))
          (input-row-count (length input-rows))
          (tb (title-background-color))
          (tf (or (title-foreground-color) (foreground-color)))
@@ -478,10 +481,17 @@
               (cairo-destroy cr)
               (cairo-surface-destroy surface)
               count)))
+         (input-line-count
+          (let* ((surface (cairo-image-surface-create 'argb32 1 1))
+                 (cr (cairo-create surface))
+                 (count (length (input-layout cr prompt input-text
+                                              width padding))))
+            (cairo-destroy cr)
+            (cairo-surface-destroy surface)
+            count))
          (real-height (menu-height padding (length filtered-options) max-options
                                   (length message-lines)
-                                  (length (input-layout prompt input-text
-                                                        width padding))
+                                  input-line-count
                                   option-line-count))
          (buffer-width (* scale width))
          (buffer-height (* scale real-height))
