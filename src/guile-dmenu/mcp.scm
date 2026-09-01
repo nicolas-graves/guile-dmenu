@@ -8,8 +8,9 @@
   #:export (mcp-question-handler mcp-trace-destination handle-mcp-message
             run-question-worker run-mcp-server))
 
-(define %maximum-question-timeout 240)
+(define %maximum-question-timeout 300)
 (define %worker-timeout-cleanup-margin 1)
+(define %maximum-timeout-response-reserve 2)
 
 (define (field object name)
   (let ((entry (and (list? object)
@@ -86,6 +87,18 @@
         (and (real? timeout) (> timeout 0)
              (<= timeout %maximum-question-timeout)))))
 
+(define (worker-arguments arguments)
+  "Reserve response-delivery time when a request uses the API maximum."
+  (let ((timeout (field arguments "timeout")))
+    (if (and timeout (>= timeout %maximum-question-timeout))
+        (map (lambda (entry)
+               (if (member (car entry) '("timeout" timeout))
+                   (cons (car entry)
+                         (- timeout %maximum-timeout-response-reserve))
+                   entry))
+             arguments)
+        arguments)))
+
 (define (valid-question-result? value)
   (let ((status (field value "status")) (answers (field value "answers")))
     (and (member status '("answered" "cancelled" "timed-out"
@@ -112,7 +125,7 @@
         (if (equal? name "ask_questions")
             (if (not (valid-timeout? arguments))
                 (result id (tool-error
-                            "question timeout must be between 0 and 240 seconds"))
+                            "question timeout must be between 0 and 300 seconds"))
                 (catch #t
                   (lambda ()
                     (result id (tool-result ((mcp-question-handler) arguments))))
@@ -334,18 +347,20 @@ cannot keep the persistent protocol server from completing requests."
                 (expire-worker! id worker)))))))
   (define (start-tool-call! id message)
     (let* ((params (field message "params"))
-           (arguments (or (field params "arguments") '())))
+           (arguments (or (field params "arguments") '()))
+           (worker-arguments* (worker-arguments arguments)))
       (cond
        ((not (valid-timeout? arguments))
         (send (result id (tool-error
-                          "question timeout must be between 0 and 240 seconds")) id))
+                          "question timeout must be between 0 and 300 seconds")) id))
        ((with-mutex workers-lock (hash-ref workers id #f))
         (send (error-result id -32600 "duplicate active request id") id))
        (else
         (let ((worker #f))
           (catch #t
             (lambda ()
-              (set! worker (spawn-question-worker worker-command id arguments))
+              (set! worker
+                    (spawn-question-worker worker-command id worker-arguments*))
               (trace-event "parent" "worker-started" id (worker-pid worker))
               ;; Fast cleanup cannot overtake registration while this lock is held.
               (with-mutex workers-lock
@@ -353,7 +368,7 @@ cannot keep the persistent protocol server from completing requests."
                                (lambda () (read-worker-response id worker)))))
                   (set-worker-thread! worker thread)
                   (hash-set! workers id worker)))
-              (let ((timeout (field arguments "timeout")))
+              (let ((timeout (field worker-arguments* "timeout")))
                 (when timeout
                   (call-with-new-thread
                    (lambda ()

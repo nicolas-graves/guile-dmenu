@@ -136,12 +136,41 @@
       "{\"error\":\"graphical question failed\"}\n"
       (get-output-string output))))
 
+(parameterize ((mcp-question-handler
+                (lambda (arguments)
+                  '((status . "timed-out") (answers . #f)))))
+  (let* ((response (handle-mcp-message
+                    '((jsonrpc . "2.0") (id . 8) (method . "tools/call")
+                      (params . ((name . "ask_questions")
+                                 (arguments . ((timeout . 300))))))))
+         (payload (field response "result")))
+    (test-assert "a 300 second timeout is accepted"
+      (not (field payload "isError")))))
+
 (let* ((response (handle-mcp-message
-                  '((jsonrpc . "2.0") (id . 8) (method . "tools/call")
+                  '((jsonrpc . "2.0") (id . 9) (method . "tools/call")
                     (params . ((name . "ask_questions")
-                               (arguments . ((timeout . 241))))))))
+                               (arguments . ((timeout . 301))))))))
        (payload (field response "result")))
-  (test-assert "timeouts above 240 seconds are rejected" (field payload "isError")))
+  (test-assert "timeouts above 300 seconds are rejected" (field payload "isError")))
+
+(let* ((output (open-output-string))
+       (server (start-test-server output)))
+  (display
+   "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"ask_questions\",\"arguments\":{\"context\":\"echo-timeout\",\"timeout\":300}}}\n"
+   (car server))
+  (force-output (car server))
+  (test-assert "maximum timeout completes through the worker"
+    (eventually (lambda ()
+                  (positive? (string-count (get-output-string output)
+                                           #\newline)))))
+  (stop-test-server server)
+  (let* ((response (json-string->scm
+                    (string-trim-right (get-output-string output))))
+         (structured (field (field response "result") "structuredContent"))
+         (answer (vector-ref (field structured "answers") 0)))
+    (test-equal "maximum timeout reserves two seconds for response delivery"
+      "298" (field answer "answer"))))
 
 (let* ((output (open-output-string))
        (server (start-test-server output))

@@ -135,10 +135,13 @@ fallback used by some desktop components.  Use ~env_vars~ rather than copying
 their current values into ~env~, so a new login or compositor restart can
 supply its new display and runtime-directory values.
 
-MCP dialog timeouts are limited to 240 seconds.  The larger Codex tool timeout
-leaves one minute for response delivery and process cleanup.  Each graphical
-request runs in a one-shot child process; the persistent MCP server remains
-available for pings, cancellation, and subsequent questions.
+MCP dialog timeouts and Codex's per-server tool timeout are both 300 seconds,
+so Codex can request the advertised maximum on its first call.  At that exact
+boundary the MCP server gives the graphical worker 298 seconds, reserving the
+remaining two seconds for response delivery and process cleanup.  Shorter
+timeouts are passed through unchanged.  Each graphical request runs in a
+one-shot child process; the persistent MCP server remains available for pings,
+cancellation, and subsequent questions.
 
 Wayland setup and event processing run inside Guile Fibers.  A connection or
 startup exception is converted to a terminal ~graphical-failure~ result; it

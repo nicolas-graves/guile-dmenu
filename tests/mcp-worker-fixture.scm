@@ -10,6 +10,14 @@
        (mode (field request "context")))
   (cond
    ((equal? mode "sleep") (sleep 30))
+   ((equal? mode "echo-timeout")
+    (scm->json
+     `((status . "answered")
+       (answers . ,(vector
+                    `((id . "timeout")
+                      (answer . ,(number->string
+                                   (field request "timeout"))))))))
+    (newline))
    ((equal? mode "failure") (primitive-exit 1))
    ((equal? mode "malformed") (display "not-json\n"))
    ((equal? mode "extra")
