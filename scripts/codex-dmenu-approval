@@ -11,13 +11,16 @@
 (define (now) (/ (get-internal-real-time) internal-time-units-per-second))
 (define (diagnose fmt . args) (apply format (current-error-port) fmt args))
 (define (runtime-lock display)
-  (let ((runtime (getenv "XDG_RUNTIME_DIR")))
-    (and runtime
-         (string-append runtime "/codex-dmenu-approval-"
-                        (string-map (lambda (c) (if (or (char-alphabetic? c)
-                                                        (char-numeric? c)) c #\_))
-                                    (or display "default"))
-                        ".lock"))))
+  ;; Codex hooks run in a sandbox where XDG_RUNTIME_DIR is readable (for the
+  ;; Wayland socket) but may not be writable.  Keep the coordination file in
+  ;; the hook's writable temporary directory instead.
+  (let ((directory (or (getenv "TMPDIR") "/tmp")))
+    (string-append directory "/codex-dmenu-approval-"
+                   (number->string (getuid)) "-"
+                   (string-map (lambda (c) (if (or (char-alphabetic? c)
+                                                   (char-numeric? c)) c #\_))
+                               (or display "default"))
+                   ".lock")))
 (define (acquire-until path deadline)
   (let ((port (open-file path "a")))
     (let loop ()

@@ -15,6 +15,7 @@ run_approval() {
   printf '%s\n' "$request" |
     GUILE_AUTO_COMPILE=0 \
     GUILE_LOAD_PATH="$project_dir/src${GUILE_LOAD_PATH:+:$GUILE_LOAD_PATH}" \
+    TMPDIR="$test_dir" \
     XDG_RUNTIME_DIR="$test_dir" \
     WAYLAND_DISPLAY=default \
     CODEX_DMENU_MOCK_RESPONSE="$response" \
@@ -53,6 +54,7 @@ secret='must-not-leak-from-malformed-input'
 printf '{"tool_input":"%s"\n' "$secret" |
   GUILE_AUTO_COMPILE=0 \
   GUILE_LOAD_PATH="$project_dir/src${GUILE_LOAD_PATH:+:$GUILE_LOAD_PATH}" \
+  TMPDIR="$test_dir" \
   XDG_RUNTIME_DIR="$test_dir" \
   "$project_dir/scripts/codex-dmenu-approval" \
   >"$test_dir/malformed" 2>"$test_dir/malformed.err"
@@ -62,7 +64,7 @@ test -s "$test_dir/malformed.err"
 
 # Hold the exact per-display lock used by the command.  Exhausting the shared
 # deadline while queued must fall back silently and must never open a prompt.
-lock="$test_dir/codex-dmenu-approval-default.lock"
+lock="$test_dir/codex-dmenu-approval-$(id -u)-default.lock"
 ready="$test_dir/lock-ready"
 flock "$lock" sh -c 'touch "$1"; sleep 1' sh "$ready" &
 holder=$!
