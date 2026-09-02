@@ -3,6 +3,7 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (vui element)
+  #:use-module (vui style)
   #:export (completion-state->vui-model
             completion-model->vui-tree
             completion-state->vui-tree
@@ -16,15 +17,85 @@
         ((vector? value) (list->vector (map copy-tree (vector->list value))))
         (else value)))
 
-(define (completion-state->vui-model state)
+(define (valid-string-list? value)
+  (and (list? value) (every string? value)))
+
+(define (visible-window options selected maximum)
+  (let* ((count (length options))
+         (page-start (if (and (positive? maximum) (positive? count))
+                         (* (quotient selected maximum) maximum)
+                         0))
+         ;; Match the legacy renderer: the last page is filled when possible.
+         (start (min page-start (max 0 (- count maximum))))
+         (length (min maximum (- count start))))
+    (values start (take (drop options start) length))))
+
+(define* (completion-state->vui-model state
+                                      #:key (prompt "") (maximum 10)
+                                      (message-lines '()) (option-details #f)
+                                      (details-visible? #f) (input-enabled? #t)
+                                      (comment-state #f) (comment-index #f)
+                                      (width 800) (padding 4)
+                                      (row-height (+ 19 (* 2 padding)))
+                                      (fixed-height? #f))
   "Return a detached, immutable-data snapshot of completion STATE."
   (unless (completing-read-state? state)
     (error "expected completing-read state" state))
-  (map (lambda (entry) (cons (car entry) (copy-tree (cdr entry))))
-       `((input-text . ,(completing-read-state-input-text state))
-         (cursor-position . ,(completing-read-state-cursor-position state))
-         (selected-index . ,(completing-read-state-selected-index state))
-         (filtered-options . ,(completing-read-state-filtered-options state))
+  (unless (and (string? prompt) (exact-integer? maximum) (>= maximum 0)
+               (valid-string-list? message-lines)
+               (or (not option-details)
+                   (and (list? option-details)
+                        (every (lambda (x) (or (not x) (string? x)))
+                               option-details)))
+               (boolean? details-visible?) (boolean? input-enabled?)
+               (or (not comment-state) (completing-read-state? comment-state))
+               (or (not comment-index)
+                   (and (exact-integer? comment-index) (>= comment-index 0)))
+               (real? width) (>= width 0) (real? padding) (>= padding 0)
+               (real? row-height) (>= row-height 0)
+               (boolean? fixed-height?))
+    (error "invalid completion presentation" state))
+  (let* ((options (completing-read-state-filtered-options state))
+         (selected (completing-read-state-selected-index state)))
+    (call-with-values
+        (lambda () (visible-window options selected maximum))
+      (lambda (start visible)
+        (let* ((commenting? (and comment-state #t))
+               (detail (and (or details-visible? (not input-enabled?))
+                            (pair? option-details)
+                            (< selected (length option-details))
+                            (list-ref option-details selected)))
+               (messages
+                (append (if commenting?
+                            (cons "Comment on selected choice  ·  Enter attach  ·  Esc back"
+                                  (if (pair? message-lines)
+                                      (cdr message-lines) '()))
+                            message-lines)
+                        (if detail (list detail) '())
+                        (if (completing-read-state-confirmation-input state)
+                            '("Confirm submission with RET") '()))))
+          (map (lambda (entry) (cons (car entry) (copy-tree (cdr entry))))
+       `((prompt . ,(if commenting? "Comment ›" prompt))
+         (mode . ,(cond (commenting? 'comment)
+                        (detail 'details)
+                        (else 'menu)))
+         (input-text . ,(completing-read-state-input-text
+                         (or comment-state state)))
+         (input-enabled? . ,(or commenting? input-enabled?))
+         (cursor-position . ,(completing-read-state-cursor-position
+                              (or comment-state state)))
+         (selected-index . ,selected)
+         (visible-start . ,start)
+         (visible-selected-index . ,(- selected start))
+         (visible-options . ,visible)
+         (message-lines . ,messages)
+         (maximum . ,maximum)
+         (reserved-option-rows . ,(if fixed-height? maximum (length visible)))
+         (row-height . ,row-height)
+         (width . ,width)
+         (padding . ,padding)
+         (comment-index . ,comment-index)
+         (filtered-options . ,options)
          (confirmation-input . ,(completing-read-state-confirmation-input state))
          (completion-invoked? . ,(completing-read-state-completion-invoked? state))
          (defaults . ,(completing-read-state-defaults state))
@@ -32,23 +103,58 @@
          (inherit-input-method? . ,(completing-read-state-inherit-input-method? state))
          (history-position . ,(completing-read-state-history-position state))
          (completion-metadata . ,(completing-read-state-completion-metadata state))
-         (completion-boundaries . ,(completing-read-state-completion-boundaries state)))))
+         (completion-boundaries . ,(completing-read-state-completion-boundaries state)))))))))
 
 (define (completion-model->vui-tree model)
   "Express a completion snapshot as a deterministic, presentation-neutral tree."
-  (let ((selected (assq-ref model 'selected-index)))
+  (let* ((selected (assq-ref model 'selected-index))
+         (start (assq-ref model 'visible-start))
+         (padding (assq-ref model 'padding))
+         (root-style (make-style `((width . ,(assq-ref model 'width))
+                                   (padding . ,padding))))
+         (input-style (make-style '((flex-grow . 1))))
+         (option-style
+          (lambda (selected?)
+            (make-style
+             `((height . ,(assq-ref model 'row-height))
+               (background-color . ,(if selected? 'highlight 'normal))
+               (color . ,(if selected? 'highlight-text 'normal-text))))))
+         (visible (assq-ref model 'visible-options)))
     (column
-     (cons (text-input (assq-ref model 'input-text)
-                       #:key 'completion-input #:on-change 'replace-input)
-           (map (lambda (option index)
-                  (button option #:key index #:action 'select
-                          #:disabled? (not (= index selected))))
-                (assq-ref model 'filtered-options)
-                (iota (length (assq-ref model 'filtered-options)))))
-     #:key 'completion)))
+     (append
+      (list (row (list (text (assq-ref model 'prompt) #:key 'prompt)
+                       (text-input (assq-ref model 'input-text)
+                                   #:key 'completion-input
+                                   #:style input-style
+                                   #:on-change 'replace-input
+                                   #:disabled?
+                                   (not (assq-ref model 'input-enabled?))))
+                 #:key 'input-row))
+      (map (lambda (line index)
+             (text line #:key (string-append "message-" (number->string index))))
+           (assq-ref model 'message-lines)
+           (iota (length (assq-ref model 'message-lines))))
+      (list
+       (list-element
+        (append
+         (map (lambda (option offset)
+                (let ((absolute (+ start offset)))
+                  (button option #:key absolute #:action 'select
+                          #:style (option-style (= absolute selected))
+                          #:disabled? (not (= absolute selected)))))
+              visible (iota (length visible)))
+         (map (lambda (offset)
+                (spacer #:key (string-append "reserved-row-"
+                                             (number->string offset))
+                        #:height (assq-ref model 'row-height)))
+              (iota (- (assq-ref model 'reserved-option-rows)
+                       (length visible)))))
+        #:key 'candidates)))
+     #:key 'completion #:style root-style)))
 
-(define (completion-state->vui-tree state)
-  (completion-model->vui-tree (completion-state->vui-model state)))
+(define* (completion-state->vui-tree state #:rest presentation)
+  (completion-model->vui-tree
+   (apply completion-state->vui-model state presentation)))
 
 (define (vui-action->completion-event action)
   "Translate a completion VUI action to the established domain event vocabulary."

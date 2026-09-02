@@ -1,13 +1,20 @@
 (use-modules (guile-dmenu filter)
              (guile-dmenu vui-adapter)
+             (srfi srfi-1)
              (srfi srfi-64)
-             (vui element))
+             (vui element)
+             (vui layout)
+             (vui style))
 
 (test-begin "vui-adapter")
 
 (define state (make-completing-read-state "a" 1 '("alpha" "beta") 1))
 (define model (completion-state->vui-model state))
 (define tree (completion-model->vui-tree model))
+(define input-row (car (element-children tree)))
+(define candidates (car (filter (lambda (node)
+                                  (eq? (element-key node) 'candidates))
+                                (element-children tree))))
 
 (test-equal "model is an exact state snapshot"
   '("a" 1 1 ("alpha" "beta"))
@@ -19,15 +26,128 @@
 
 (test-equal "tree has stable completion root" '(column completion)
   (list (element-kind tree) (element-key tree)))
-(test-equal "tree contains input followed by every candidate"
-  '(text-input button button)
+(test-equal "tree contains prompt/input row and candidate list"
+  '(row list)
   (map element-kind (element-children tree)))
+(test-equal "prompt and Unicode input are retained exactly"
+  '("" "a")
+  (map (lambda (node)
+         (assq-ref (element-properties node)
+                   (if (eq? (element-kind node) 'text) 'text 'value)))
+       (element-children input-row)))
 (test-equal "text input uses the symbolic replace-input handler"
   'replace-input
-  (assq-ref (element-properties (car (element-children tree))) 'on-change))
+  (assq-ref (element-properties (cadr (element-children input-row))) 'on-change))
 (test-equal "only selected candidate is actionable" '(#t #f)
   (map (lambda (node) (assq-ref (element-properties node) 'disabled?))
-       (cdr (element-children tree))))
+       (element-children candidates)))
+(test-equal "selected row owns explicit highlight style"
+  '(normal highlight)
+  (map (lambda (node) (style-ref (element-style node) 'background-color))
+       (element-children candidates)))
+
+(let* ((paged-state (make-completing-read-state
+                     "λ" 7 '("零" "一" "二" "三" "四" "五" "六" "七")))
+       (paged (completion-state->vui-model
+               paged-state #:prompt "選択 ›" #:maximum 3
+               #:width 512 #:padding 7)))
+  (test-equal "paging retains absolute selection and fills final page"
+    '(5 7 2 ("五" "六" "七"))
+    (map (lambda (key) (assq-ref paged key))
+         '(visible-start selected-index visible-selected-index visible-options)))
+  (let* ((paged-tree (completion-model->vui-tree paged))
+         (list-node (car (filter (lambda (node)
+                                  (eq? (element-key node) 'candidates))
+                                (element-children paged-tree)))))
+    (test-equal "paged row keys remain absolute indices" '(5 6 7)
+      (map element-key (element-children list-node)))
+    (test-equal "resize and padding are deterministic style inputs" '(512 7)
+      (map (lambda (key) (style-ref (element-style paged-tree) key))
+           '(width padding)))))
+
+(let* ((empty (make-completing-read-state "∅" 0 '()))
+       (empty-model (completion-state->vui-model
+                     empty #:maximum 4 #:row-height 31 #:fixed-height? #t))
+       (empty-tree (completion-model->vui-tree empty-model))
+       (empty-candidates (car (filter (lambda (node)
+                                        (eq? (element-key node) 'candidates))
+                                      (element-children empty-tree)))))
+  (test-equal "empty fixed-height menu reserves configured rows" '(0 4 ())
+    (map (lambda (key) (assq-ref empty-model key))
+         '(visible-start reserved-option-rows visible-options)))
+  (test-equal "reserved empty rows are deterministic spacers" 4
+    (count (lambda (node) (eq? (element-kind node) 'spacer))
+           (element-children empty-candidates)))
+  (test-equal "fixed-height spacers reserve actual candidate-row height"
+    '(31 31 31 31)
+    (map (lambda (node) (assq-ref (element-properties node) 'height))
+         (element-children empty-candidates))))
+
+(let* ((short-state (make-completing-read-state "" 0 '("one" "two")))
+       (short-model (completion-state->vui-model
+                     short-state #:maximum 4 #:row-height 29 #:fixed-height? #t))
+       (short-tree (completion-model->vui-tree short-model))
+       (short-candidates (car (filter (lambda (node)
+                                        (eq? (element-key node) 'candidates))
+                                      (element-children short-tree)))))
+  (test-equal "fixed-height list contains candidates and reserved rows"
+    '(button button spacer spacer)
+    (map element-kind (element-children short-candidates)))
+  (test-equal "candidate and reserved rows share configured height"
+    '(29 29 29 29)
+    (map (lambda (node)
+           (if (eq? (element-kind node) 'spacer)
+               (assq-ref (element-properties node) 'height)
+               (style-ref (element-style node) 'height)))
+         (element-children short-candidates)))
+  (test-equal "fixed-height candidate list has maximum-times-row geometry" 116
+    (rect-height
+     (layout-rect
+      (layout-tree short-candidates
+                   #:measure (lambda (element maximum-width maximum-height)
+                               (values 10 7)))))))
+
+(let* ((zero-state (make-completing-read-state "" 0 '("one")))
+       (zero-model (completion-state->vui-model
+                    zero-state #:maximum 2 #:row-height 0 #:fixed-height? #t))
+       (zero-tree (completion-model->vui-tree zero-model))
+       (zero-candidates (car (filter (lambda (node)
+                                       (eq? (element-key node) 'candidates))
+                                     (element-children zero-tree)))))
+  (test-equal "zero row height is accepted and retained"
+    '(0 0)
+    (list (assq-ref zero-model 'row-height)
+          (style-ref (element-style (car (element-children zero-candidates)))
+                     'height))))
+
+(let* ((details-state (make-completing-read-state "" 1 '("Fast" "Safe")))
+       (details (completion-state->vui-model
+                 details-state #:message-lines '("Choose")
+                 #:option-details '("quick" "careful")
+                 #:details-visible? #t)))
+  (test-equal "details mode appends the absolute selected row detail"
+    '(details ("Choose" "careful"))
+    (map (lambda (key) (assq-ref details key)) '(mode message-lines))))
+
+(let* ((menu-state (make-completing-read-state "" 1 '("Fast" "Safe")))
+       (editor (make-completing-read-state "理由" 2 '()))
+       (comment (completion-state->vui-model
+                 menu-state #:prompt "Mode?" #:message-lines '("keys" "context")
+                 #:comment-state editor #:comment-index 1)))
+  (test-equal "comment mode replaces prompt/input while preserving selection"
+    '(comment "Comment ›" "理由" 2 1 1 #t)
+    (map (lambda (key) (assq-ref comment key))
+         '(mode prompt input-text cursor-position selected-index comment-index
+                input-enabled?)))
+  (test-equal "comment mode replaces only the shortcut message"
+    '("Comment on selected choice  ·  Enter attach  ·  Esc back" "context")
+    (assq-ref comment 'message-lines)))
+
+(let* ((confirm-state (make-completing-read-state
+                       "yes" 0 '("yes") 3 "yes"))
+       (confirm (completion-state->vui-model confirm-state)))
+  (test-equal "confirmation mode has a deterministic visible instruction"
+    '("Confirm submission with RET") (assq-ref confirm 'message-lines)))
 
 (test-equal "actions map to existing events"
   '(select next previous complete cancel
