@@ -5,7 +5,7 @@
   #:use-module (guile-dmenu keyboard)
   #:use-module (guile-dmenu filter)
   #:use-module (guile-dmenu completion)
-  #:use-module (wayland client display)
+  #:use-module ((wayland client display) #:prefix client:)
   #:use-module (wayland client protocol wayland)
   #:use-module (wayland client protocol xdg-shell)
   #:use-module (ice-9 match)
@@ -176,7 +176,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                                     #:cancel-as-event? #t))
          (let* ((conn (connect-wayland (make-seat-listener session)))
                 (display (wayland-connection-display conn))
-                (port (fdes->inport (wl-display-get-fd display)))
+                (port (fdes->inport (client:wl-display-get-fd display)))
                 (_wayland-phase
                  (report-startup-phase! 'wayland-connected))
                 (state (initial-state options initial-input default
@@ -196,7 +196,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
              (draw-state prompt message-lines option-details details-visible?
                          input-enabled? conn cache buffer-scale s maximum
                          comment-state comment-index)
-             (wl-display-flush display))
+             (client:wl-display-flush display))
            (create-window
             conn "dmenu" "wl-dmenu" (menu-width)
             (lambda (data surface serial)
@@ -218,7 +218,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
            ;; Send the initial empty surface commit before waiting for the
            ;; compositor's configure event.  Redrawing before configure is a
            ;; protocol error, but waiting without flushing deadlocks startup.
-           (wl-display-flush display)
+           (client:wl-display-flush display)
            (spawn-fiber
             (lambda ()
               ;; A callback or drawing failure must wake the result waiter.
@@ -236,7 +236,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                       (put-message result '(graphical-failure)))
                     (prepare)))
                 (set! read-prepared? #t)
-                (wl-display-flush display)
+                (client:wl-display-flush display)
                 (let ((event (perform-operation
                               (choice-operation
                                (get-operation events)
@@ -250,7 +250,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
                      (redraw s comment-state comment-index)
                      (loop s comment-state comment-index))
                     ('wayland (set! read-prepared? #f)
-                              (if (or (negative? (wl-display-read-events display))
+                              (if (or (negative? (client:wl-display-read-events display))
                                       (negative? (wl-display-dispatch-pending display)))
                                   (put-message result '(graphical-failure))
                                   (loop s comment-state comment-index)))
@@ -339,7 +339,7 @@ ESCAPE-ACTION is `cancel' by default; `back' returns the symbol `back'."
              (when read-prepared?
                (wl-display-cancel-read display)
                (set! read-prepared? #f))
-             (wl-display-disconnect display)
+             (client:wl-display-disconnect display)
              (match answer
                (('answered value) (answered value))
                (('cancelled) (terminated 'cancelled))

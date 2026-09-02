@@ -19,6 +19,15 @@
 (define mcp-command
   (or (getenv "GUILE_DMENU_MCP")
       (error "GUILE_DMENU_MCP is not set")))
+(define project-dir
+  (or (getenv "GUILE_DMENU_PROJECT_DIR")
+      (error "GUILE_DMENU_PROJECT_DIR is not set")))
+
+(define (persistent-river-test-manager-command session)
+  (format #f
+          "exec env GUILE_WAYLAND_PROTOCOL_PATH=\"$(pkg-config --variable=pcfiledir river-protocols)/../river-protocols/stable\" RIVER_TEST_MANAGER_EVENTS='~a' GUILE_RIVER_TEST_MANAGER='~a/tests/river/test-manager.scm' guile --no-auto-compile -L '~a/src' -L '~a/tests' -s '~a/tests/river-manager-driver.scm'"
+          (river-session-manager-events session)
+          river-dir river-dir river-dir project-dir))
 
 (define (start-dmenu session)
   (let* ((input (pipe))
@@ -258,6 +267,11 @@
         (eventually "selected MCP worker cleanup"
                     (lambda ()
                       (string-null? (process-children (car client))))))
+      ;; The first threaded request starts Guile's persistent runtime helper
+      ;; threads.  Establish the leak-check baseline after that one-time
+      ;; initialization and after the watchdog's 100 ms polling interval.
+      (usleep 200000)
+      (set! initial-thread-count (process-thread-count (car client)))
       (display
        (string-append
         "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\","
@@ -327,7 +341,7 @@
 
 (test-begin "guile-dmenu integration")
 (call-with-headless-river-session
- (lambda (session) (river-test-manager-command session river-dir))
+ persistent-river-test-manager-command
  run-smoke
  #:root (or (getenv "TMPDIR") "/tmp"))
 (test-end "guile-dmenu integration")

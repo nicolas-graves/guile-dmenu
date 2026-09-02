@@ -196,7 +196,8 @@ whose car is a string and whose cdr is an integer position within that string."
   (let ((state (if (or (memq event '(next previous next-default
                                       previous-default left right home end
                                       backspace ctrl+backspace))
-                       (and (pair? event) (eq? (car event) 'input-char)))
+                       (and (pair? event)
+                            (memq (car event) '(input-char replace-input))))
                    (clear-completion-immediacy state)
                    state)))
     (match event
@@ -239,6 +240,11 @@ whose car is a string and whose cdr is an integer position within that string."
       (('input-char char)
        (if input-enabled?
            (handle-input-char char state options)
+           (list 'no-change state)))
+      (('replace-input (? string? value) (? exact-integer? cursor))
+       (if (and input-enabled? (<= 0 cursor (string-length value)))
+           (list 'state-update
+                 (update-text-and-filter state value options cursor))
            (list 'no-change state)))
       (_ (list 'no-change state)))))
 

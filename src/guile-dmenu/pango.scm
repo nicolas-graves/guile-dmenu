@@ -13,6 +13,20 @@
 (gi-import "Pango")
 (gi-import "PangoCairo")
 
+;; Resolve gi-import's dynamic bindings once into statically visible names.
+(define %font-description-from-string
+  (module-ref (current-module) 'pango-font-description-from-string))
+(define %create-layout
+  (module-ref (current-module) 'pango-cairo-create-layout))
+(define %set-font-description
+  (module-ref (current-module) 'pango-layout-set-font-description))
+(define %set-text
+  (module-ref (current-module) 'pango-layout-set-text))
+(define %get-pixel-size
+  (module-ref (current-module) 'pango-layout-get-pixel-size))
+(define %show-layout
+  (module-ref (current-module) 'pango-cairo-show-layout))
+
 ;; Follow the host's monospace Fontconfig alias.  This keeps the menu aligned
 ;; with terminal and editor font configuration.  Pango's unsuffixed size is in
 ;; points, matching the size configured by terminal emulators.
@@ -35,20 +49,20 @@
   (scm-to-cairo (scm->pointer cr)))
 
 (define (font-description)
-  (pango-font-description-from-string
+  (%font-description-from-string
    (string-append default-font-face " "
                   (number->string default-font-point-size))))
 
 (define (make-text-layout cr text)
-  (let ((layout (pango-cairo-create-layout (cairo-context-pointer cr))))
-    (pango-layout-set-font-description layout (font-description))
+  (let ((layout (%create-layout (cairo-context-pointer cr))))
+    (%set-font-description layout (font-description))
     ;; The introspected API retains Pango's explicit byte-length argument.
-    (pango-layout-set-text layout text -1)
+    (%set-text layout text -1)
     layout))
 
 (define (pango-text-size cr text)
   (let ((layout (make-text-layout cr text)))
-    (call-with-values (lambda () (pango-layout-get-pixel-size layout)) list)))
+    (call-with-values (lambda () (%get-pixel-size layout)) list)))
 
 (define (pango-text-width cr text)
   (car (pango-text-size cr text)))
@@ -90,7 +104,7 @@
 (define (draw-pango-text! cr text x row-y row-height)
   (let* ((layout (make-text-layout cr text))
          (size (call-with-values
-                   (lambda () (pango-layout-get-pixel-size layout)) list))
+                   (lambda () (%get-pixel-size layout)) list))
          (height (cadr size)))
     (cairo-move-to cr x (+ row-y (max 0 (/ (- row-height height) 2))))
-    (pango-cairo-show-layout (cairo-context-pointer cr) layout)))
+    (%show-layout (cairo-context-pointer cr) layout)))

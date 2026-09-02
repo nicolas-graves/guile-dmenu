@@ -92,6 +92,7 @@ env -i PATH="$PATH" HOME="$HOME" XDG_CACHE_HOME="$worker_cache" \
   GUILE_VUI_PACKAGE="$vui" \
   GUILE_WAYLAND_PACKAGE="$wayland" \
   guix shell -L "$module_dir" --no-cwd --container \
+    --preserve='^GUILE_(AUTO_COMPILE|D?MENU|VUI|WAYLAND)_' \
     --expose="$project_dir" \
     -e '(@ (guile-dmenu-package) guile-vui-dmenu)' -- \
     guile --no-auto-compile "$project_dir/tests/vui-dependency-test.scm"
