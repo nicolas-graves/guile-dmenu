@@ -3,7 +3,21 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 test_dir=$(mktemp -d)
-trap 'rm -rf -- "$test_dir"' EXIT HUP INT TERM
+holder=
+release=
+cleanup() {
+  trap - EXIT HUP INT TERM
+  if test -n "$holder"; then
+    test -z "$release" || touch "$release"
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+  fi
+  rm -rf -- "$test_dir"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 request='{"tool_name":"shell","tool_input":{"command":"true"}}'
 
@@ -66,12 +80,18 @@ test -s "$test_dir/malformed.err"
 # deadline while queued must fall back silently and must never open a prompt.
 lock="$test_dir/codex-dmenu-approval-$(id -u)-default.lock"
 ready="$test_dir/lock-ready"
-flock "$lock" sh -c 'touch "$1"; sleep 1' sh "$ready" &
+release="$test_dir/lock-release"
+flock "$lock" sh -c '
+  touch "$1"
+  while test ! -e "$2"; do sleep 0.01; done
+' sh "$ready" "$release" &
 holder=$!
 while test ! -e "$ready"; do sleep 0.01; done
 CODEX_DMENU_TIMEOUT=0.1 run_approval 'Allow once' \
   "$test_dir/contended" "$test_dir/contended.err"
+touch "$release"
 wait "$holder"
+holder=
 test ! -s "$test_dir/contended"
 grep -q 'lock unavailable or deadline expired' "$test_dir/contended.err"
 

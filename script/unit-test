@@ -2,6 +2,31 @@
 set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if test -d "$project_dir/../dependencies/guile-vui"; then
+  dependency_root=$(CDPATH= cd -- "$project_dir/../dependencies" && pwd)
+else
+  dependency_root=$(CDPATH= cd -- "$project_dir/.." && pwd)
+fi
+test_state=${GUILE_DMENU_TEST_STATE:-${TMPDIR:?TMPDIR must name writable test storage}/guile-dmenu-tests}
+GUILE_DMENU_TEST_STATE=$test_state
+worker_cache="$test_state/unit-cache"
+GUILE_VUI_SOURCE=${GUILE_VUI_SOURCE:-$dependency_root/guile-vui}
+GUILE_WAYLAND_SOURCE=${GUILE_WAYLAND_SOURCE:-$dependency_root/guile-wayland}
+mkdir -p "$worker_cache"
+XDG_CACHE_HOME="$worker_cache"
+export XDG_CACHE_HOME GUILE_VUI_SOURCE GUILE_WAYLAND_SOURCE GUILE_DMENU_TEST_STATE
+
+"$project_dir/script/dependency-test"
+
+if test "${GUILE_DMENU_UNIT_SHELL:-0}" != 1 &&
+   ! guile --no-auto-compile -c \
+     '(use-modules (cairo) (g-golf))' >/dev/null 2>&1; then
+  GUILE_DMENU_UNIT_SHELL=1
+  export GUILE_DMENU_UNIT_SHELL
+  exec guix shell -L "$project_dir/.guix/modules" \
+    -e '(@ (guile-dmenu-package) guile-dmenu-devel)' -- \
+    "$project_dir/script/unit-test"
+fi
 
 if ! guile --no-auto-compile -c '(use-modules (cairo))' \
      >/dev/null 2>&1; then

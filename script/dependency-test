@@ -1,0 +1,97 @@
+#!/bin/sh
+set -eu
+
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+module_dir="$project_dir/.guix/modules"
+if test -d "$project_dir/../dependencies/guile-vui"; then
+  dependency_root=$(CDPATH= cd -- "$project_dir/../dependencies" && pwd)
+else
+  dependency_root=$(CDPATH= cd -- "$project_dir/.." && pwd)
+fi
+worker_state=${GUILE_DMENU_TEST_STATE:-${TMPDIR:?TMPDIR must name writable test storage}/guile-dmenu-tests}
+worker_cache="$worker_state/cache"
+mkdir -p "$worker_state" "$worker_cache"
+case_dir=$(mktemp -d "$worker_state/dependency-test.XXXXXX")
+trap 'rm -rf -- "$case_dir"' EXIT HUP INT TERM
+vui_source=${GUILE_VUI_SOURCE:-$dependency_root/guile-vui}
+wayland_source=${GUILE_WAYLAND_SOURCE:-$dependency_root/guile-wayland}
+export XDG_CACHE_HOME="$worker_cache"
+
+test "$(git -C "$vui_source" rev-parse HEAD)" = \
+  b35ea090d22d4e821950e180e06ada58b06714b7
+test "$(git -C "$wayland_source" rev-parse HEAD)" = \
+  35eff2a28f9843dbdddeee2cc594788b72569bad
+test -z "$(git -C "$vui_source" status --porcelain)"
+test -z "$(git -C "$wayland_source" status --porcelain)"
+
+export GUILE_VUI_SOURCE="$vui_source"
+export GUILE_WAYLAND_SOURCE="$wayland_source"
+
+if env -u GUILE_VUI_SOURCE \
+     guix build -L "$module_dir" --no-grafts --no-offload \
+       -e '(@ (guile-dmenu-package) guile-vui-dmenu)' \
+       >"$case_dir/missing-vui.out" \
+       2>"$case_dir/missing-vui.err"; then
+  echo "guile-vui package silently resolved an ambient dependency source" >&2
+  exit 1
+fi
+grep -q 'GUILE_VUI_SOURCE must name the controller-provided dependency source' \
+  "$case_dir/missing-vui.err"
+
+if env -u GUILE_WAYLAND_SOURCE \
+     guix build -L "$module_dir" --no-grafts --no-offload \
+       -e '(@ (guile-dmenu-package) guile-vui-dmenu)' \
+       >"$case_dir/missing-wayland.out" \
+       2>"$case_dir/missing-wayland.err"; then
+  echo "guile-wayland package silently resolved an ambient dependency source" >&2
+  exit 1
+fi
+grep -q 'GUILE_WAYLAND_SOURCE must name the controller-provided dependency source' \
+  "$case_dir/missing-wayland.err"
+
+if GUILE_VUI_SOURCE="$project_dir" \
+     guix build -L "$module_dir" --no-grafts --no-offload \
+       -e '(@ (guile-dmenu-package) guile-vui-dmenu)' \
+       >"$case_dir/mislabeled-vui.out" \
+       2>"$case_dir/mislabeled-vui.err"; then
+  echo "guile-vui package accepted a source at the wrong revision" >&2
+  exit 1
+fi
+grep -q 'must resolve to pinned revision' "$case_dir/mislabeled-vui.err"
+
+vui=$(guix build -L "$module_dir" --no-grafts --no-offload \
+  -e '(@ (guile-dmenu-package) guile-vui-dmenu)')
+wayland=$(guix build -L "$module_dir" --no-grafts --no-offload \
+  -e '(@ (guile-dmenu-package) guile-wayland-dmenu)')
+
+# A source worktree may acquire tracked, untracked, or ignored files after the
+# pinned commit.  The git-checkout origin must still produce the exact same
+# store item because it imports the commit object, not working-tree contents.
+dirty_vui="$case_dir/dirty-guile-vui"
+git clone --quiet --no-hardlinks "$vui_source" "$dirty_vui"
+printf '%s\n' dirty >>"$dirty_vui/README.md"
+printf '%s\n' untracked >"$dirty_vui/untracked-by-test"
+printf '%s\n' ignored >"$dirty_vui/result"
+dirty_result=$(GUILE_VUI_SOURCE="$dirty_vui" \
+  guix build -L "$module_dir" --no-grafts --no-offload \
+    -e '(@ (guile-dmenu-package) guile-vui-dmenu)')
+test "$dirty_result" = "$vui"
+
+case "$vui" in
+  /gnu/store/*-guile-vui-0.1.0-1.b35ea09) ;;
+  *) echo "unexpected guile-vui package: $vui" >&2; exit 1 ;;
+esac
+
+env -i PATH="$PATH" HOME="$HOME" XDG_CACHE_HOME="$worker_cache" \
+  GUILE_AUTO_COMPILE=0 \
+  GUILE_VUI_SOURCE="$vui_source" \
+  GUILE_WAYLAND_SOURCE="$wayland_source" \
+  GUILE_DMENU_CHECKOUT="$project_dir" \
+  GUILE_VUI_CHECKOUT="$vui_source" \
+  GUILE_WAYLAND_CHECKOUT="$wayland_source" \
+  GUILE_VUI_PACKAGE="$vui" \
+  GUILE_WAYLAND_PACKAGE="$wayland" \
+  guix shell -L "$module_dir" --no-cwd --container \
+    --expose="$project_dir" \
+    -e '(@ (guile-dmenu-package) guile-vui-dmenu)' -- \
+    guile --no-auto-compile "$project_dir/tests/vui-dependency-test.scm"
