@@ -50,5 +50,6 @@ guile --no-auto-compile -L "$project_dir/src" \
   "$project_dir/tests/vui-adapter-test.scm"
 "$project_dir/tests/question-command-executable-test.sh"
 "$project_dir/tests/approval-command-test.sh"
+"$project_dir/tests/dmenu-cli-test.sh"
 exec guile --no-auto-compile -L "$project_dir/src" \
   "$project_dir/tests/filter-test.scm"

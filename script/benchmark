@@ -3,6 +3,7 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 shared_dir=${GUILE_PERFORMANCE_HARNESS_DIR:-$project_dir/../guile-performance-harness}
+export GUILE_DMENU_PROJECT_DIR="$project_dir"
 
 guix shell -L "$project_dir/.guix/modules" -L "$shared_dir/.guix/modules" \
   guile-dmenu guile-performance-harness guile-ares-rs -- \

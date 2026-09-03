@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+export GUILE_DMENU_PROJECT_DIR="$project_dir"
+: "${TMPDIR:?TMPDIR must name writable validation storage}"
+: "${GUILE_DMENU_TEST_STATE:?GUILE_DMENU_TEST_STATE must name worker-local state}"
+: "${GUILE_VUI_SOURCE:?GUILE_VUI_SOURCE must name the pinned guile-vui checkout}"
+: "${GUILE_WAYLAND_SOURCE:?GUILE_WAYLAND_SOURCE must name the pinned guile-wayland checkout}"
+: "${GUILE_RIVER_DIR:?GUILE_RIVER_DIR must name the private River fixture}"
+: "${LOOPX_SHORT_RUNTIME_DIR:?LOOPX_SHORT_RUNTIME_DIR must name a short private runtime path}"
+
+test -d "$GUILE_DMENU_TEST_STATE"
+test -w "$GUILE_DMENU_TEST_STATE"
+test -d "$LOOPX_SHORT_RUNTIME_DIR"
+test -w "$LOOPX_SHORT_RUNTIME_DIR"
+test -f "$GUILE_RIVER_DIR/manifest.scm"
+
+"$project_dir/script/dependency-test"
+"$project_dir/script/unit-test"
+guix build -L "$project_dir/.guix/modules" --no-grafts --no-offload \
+  -e '(@ (guile-dmenu-package) guile-dmenu-devel)'
+"$project_dir/script/benchmark"
+"$project_dir/script/integration-test"
+
+if git -C "$project_dir" grep -n -E \
+  'guile-dmenu (cursor-render|keyboard|memory-utils|pango|wayland)' -- \
+  ':!script/release-gate'; then
+  echo 'superseded runtime reference remains in tracked code' >&2
+  exit 1
+fi
+git -C "$project_dir" diff --check
+git -C "$project_dir" diff --quiet
+git -C "$project_dir" diff --cached --quiet
+test -z "$(git -C "$GUILE_VUI_SOURCE" status --porcelain)"
+test -z "$(git -C "$GUILE_WAYLAND_SOURCE" status --porcelain)"
+
+printf '%s\n' 'guile-dmenu D3.2 release gate: PASS'

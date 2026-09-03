@@ -183,8 +183,17 @@
                    (update-domain model 'state action options collection
                                   selection-mode input-enabled?))))))
         (define (view model)
-          (completion-state->vui-tree
-           (model-ref model 'state)
+          (let* ((input-state (or (model-ref model 'comment-state)
+                                  (model-ref model 'state)))
+                 (input-lines
+                  (if (input-line-wrapping?)
+                      (wrapped-text-line-count
+                       (completing-read-state-input-text input-state)
+                       (- (menu-width) (* 2 (menu-padding))
+                          (* 2 (border-width))))
+                      1)))
+            (completion-state->vui-tree
+             (model-ref model 'state)
            #:prompt prompt #:maximum maximum #:message-lines (message-lines)
            #:option-details option-details
            #:details-visible? (model-ref model 'details-visible?)
@@ -213,7 +222,8 @@
                                        (color->vui (alt-foreground-color)))
            #:border-color (color->vui (border-color))
            #:border-width (border-width) #:selected-prefix (prefix-text)
-           #:input-wrapping? (input-line-wrapping?)))
+             #:input-wrapping? (input-line-wrapping?)
+             #:input-line-count input-lines)))
         (define (logical-size model)
           (let* ((snapshot
                   (completion-state->vui-model
@@ -224,7 +234,17 @@
                    #:comment-state (model-ref model 'comment-state)
                    #:comment-index (model-ref model 'comment-index)
                    #:fixed-height? (fixed-height?)))
-                 (rows (+ 1 (assq-ref snapshot 'reserved-option-rows)
+                 (input-state (or (model-ref model 'comment-state)
+                                  (model-ref model 'state)))
+                 (input-lines
+                  (if (input-line-wrapping?)
+                      (wrapped-text-line-count
+                       (completing-read-state-input-text input-state)
+                       (- (menu-width) (* 2 (menu-padding))
+                          (* 2 (border-width))))
+                      1))
+                 (rows (+ (if (input-line-wrapping?) (+ 1 input-lines) 1)
+                          (assq-ref snapshot 'reserved-option-rows)
                           (length (assq-ref snapshot 'message-lines)))))
             (list (menu-width) (* rows (item-height (menu-padding))))))
         (define (lifecycle event . arguments)

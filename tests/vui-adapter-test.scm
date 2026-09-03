@@ -56,24 +56,23 @@
          #:title-background 'title-bg #:title-foreground 'title-fg
          #:alternate-background 'alternate-bg #:alternate-foreground 'alternate-fg
          #:border-color 'edge #:border-width 3 #:selected-prefix "» "
-         #:input-wrapping? #t))
+         #:input-wrapping? #t #:input-line-count 3))
        (styled-tree (completion-model->vui-tree styled-model))
-       (styled-row (car (element-children styled-tree)))
-       (prompt-node (car (element-children styled-row)))
-       (input-node (cadr (element-children styled-row)))
+       (prompt-node (car (element-children styled-tree)))
+       (input-node (cadr (element-children styled-tree)))
        (styled-list (car (filter (lambda (node) (eq? (element-key node) 'candidates))
                                  (element-children styled-tree))))
        (rows (element-children styled-list)))
   (test-equal "retained presentation parameters survive the model boundary"
     '(filter-bg filter-fg caret title-bg title-fg alternate-bg alternate-fg
-                edge 3 "» " #t)
+                edge 3 "» " #t 3)
     (map (lambda (key) (assq-ref styled-model key))
          '(filter-background filter-foreground cursor-color
            title-background title-foreground alternate-background
            alternate-foreground border-color border-width selected-prefix
-           input-wrapping?)))
+           input-wrapping? input-line-count)))
   (test-equal "title, filter, cursor, border, and wrapping reach VUI styles"
-    '(title-bg title-fg filter-bg filter-fg caret edge 3 auto)
+    '(title-bg title-fg filter-bg filter-fg caret edge 3 81)
     (list (style-ref (element-style prompt-node) 'background-color)
           (style-ref (element-style prompt-node) 'color)
           (style-ref (element-style input-node) 'background-color)
@@ -81,7 +80,16 @@
           (style-ref (element-style input-node) 'cursor-color)
           (style-ref (element-style styled-tree) 'border-color)
           (style-ref (element-style styled-tree) 'border-width)
-          (style-ref (element-style input-node) 'max-height)))
+          (style-ref (element-style input-node) 'height)))
+  (test-equal "wrapped input expands complete menu geometry" 197
+    (rect-height
+     (layout-rect
+      (layout-tree styled-tree
+                   #:measure (lambda (element maximum-width maximum-height)
+                               (values 10
+                                       (if (eq? (element-key element)
+                                                'completion-input)
+                                           81 27)))))))
   (test-equal "alternate colors and selected prefix use absolute row identity"
     '((black white "zero") (alternate-bg alternate-fg "one")
       (blue white "» two"))

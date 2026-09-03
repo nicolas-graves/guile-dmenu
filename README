@@ -225,13 +225,19 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
 - ~-B, --border~: border width in pixels (0 = no border, the default).
 - ~--fixed-height~: keep the window height constant as the filter narrows.
 - ~--line-height~: override the row height (pixels).
-- ~--input-wrap~: allow long input text to wrap instead of clipping to one row.
+- ~--input-wrap~: place the prompt above the input and grow the surface using
+  Pango-measured wrapped input lines instead of clipping to one row.
 - ~--message~: show a read-only, wrapped detail panel above the choices.
 - ~--no-input~: disable filtering and text entry (useful for confirmations).
 - ~--timeout~: close without a selection after the given number of seconds.
 - Colors, all ~#RRGGBB~: ~--nb/--nf~ (normal), ~--hb/--hf~ (selected item),
   ~--fb/--ff~ (filter/input line), ~--cb~ (cursor), ~--tb/--tf~ (prompt
   badge), ~--ab/--af~ (alternating row), ~--bdr~ (border).
+
+The complete release proof is available as ~script/release-gate~.  It fails
+closed unless explicit pinned guile-vui/guile-wayland checkouts, a private
+River fixture, worker-local state, and a short private runtime directory are
+provided through the environment variables named by the script.
 
 ** Differences with dmenu-like programs ?
 - Powered by guile

@@ -6,6 +6,7 @@
   #:use-module (srfi srfi-1)
   #:export (wrap-message-lines
             wrap-message-to-width
+            wrapped-text-line-count
             background-color
             foreground-color
             highlight-background-color
@@ -103,6 +104,11 @@
 (define (text-width text)
   (text-measurement-width (pango-measure %pango-service text)))
 
+(define (wrapped-text-line-count text width)
+  "Return the number of Pango-shaped lines needed for TEXT at WIDTH."
+  (text-measurement-line-count
+   (pango-measure %pango-service text #:width (max 1 width))))
+
 ;; Produce the strings consumed by the VUI tree while using the same shaping
 ;; service as its renderer. Prefer whitespace boundaries, but always make
 ;; progress for paths and other unbroken strings.
@@ -164,4 +170,3 @@
          (count (min max-options (- option-count start))))
     (list (take (drop options start) count)
           (- selected-index start))))
-

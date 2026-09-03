@@ -330,6 +330,11 @@
               80 4))
      1))
 
+(test-assert "input line count uses the same measured wrapping"
+  (> (wrapped-text-line-count
+      "WWWWWWWWWWWWWWWWWWWWWWWW with measured wrapping" 72)
+     1))
+
 (test-equal "pixel wrapping preserves the truncation marker"
   '("alpha" "... [truncated]")
   (wrap-message-to-width "alpha\nbeta\ngamma" 800 4 2))

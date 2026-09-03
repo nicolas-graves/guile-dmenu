@@ -87,7 +87,8 @@ the initial press and every repeat without acquiring completion state."
                                       (alternate-foreground #f)
                                       (border-color 'black) (border-width 0)
                                       (selected-prefix "")
-                                      (input-wrapping? #f))
+                                      (input-wrapping? #f)
+                                      (input-line-count 1))
   "Return a detached, immutable-data snapshot of completion STATE."
   (unless (completing-read-state? state)
     (error "expected completing-read state" state))
@@ -112,7 +113,8 @@ the initial press and every repeat without acquiring completion state."
                             alternate-background alternate-foreground
                             border-color))
                (real? border-width) (>= border-width 0)
-               (string? selected-prefix) (boolean? input-wrapping?))
+               (string? selected-prefix) (boolean? input-wrapping?)
+               (exact-integer? input-line-count) (positive? input-line-count))
     (error "invalid completion presentation" state))
   (let* ((options (completing-read-state-filtered-options state))
          (selected (completing-read-state-selected-index state)))
@@ -166,6 +168,7 @@ the initial press and every repeat without acquiring completion state."
          (border-width . ,border-width)
          (selected-prefix . ,selected-prefix)
          (input-wrapping? . ,input-wrapping?)
+         (input-line-count . ,input-line-count)
          (width . ,width)
          (padding . ,padding)
          (comment-index . ,comment-index)
@@ -199,8 +202,8 @@ the initial press and every repeat without acquiring completion state."
                                      (assq-ref model 'normal-foreground))))))
          (input-style
           (make-style `((flex-grow . 1)
-                        (max-height . ,(if (assq-ref model 'input-wrapping?)
-                                          'auto (assq-ref model 'row-height)))
+                        (height . ,(* (assq-ref model 'input-line-count)
+                                      (assq-ref model 'row-height)))
                         (background-color . ,(or (assq-ref model 'filter-background)
                                                 (assq-ref model 'normal-background)))
                         (color . ,(or (assq-ref model 'filter-foreground)
@@ -224,15 +227,19 @@ the initial press and every repeat without acquiring completion state."
          (visible (assq-ref model 'visible-options)))
     (column
      (append
-      (list (row (list (text (assq-ref model 'prompt) #:key 'prompt
-                             #:style prompt-style)
-                       (text-input (assq-ref model 'input-text)
-                                   #:key 'completion-input
-                                   #:style input-style
-                                   #:on-change 'replace-input
-                                   #:disabled?
-                                   (not (assq-ref model 'input-enabled?))))
-                 #:key 'input-row))
+      (let ((prompt (text (assq-ref model 'prompt) #:key 'prompt
+                          #:style prompt-style))
+            (input (text-input (assq-ref model 'input-text)
+                               #:key 'completion-input
+                               #:style input-style
+                               #:on-change 'replace-input
+                               #:disabled?
+                               (not (assq-ref model 'input-enabled?)))))
+        (if (assq-ref model 'input-wrapping?)
+            (list prompt input)
+            (list (row (list prompt input) #:key 'input-row
+                       #:style (make-style
+                                `((height . ,(assq-ref model 'row-height))))))))
       (map (lambda (line index)
              (text line #:key (string-append "message-" (number->string index))
                    #:style text-style))
