@@ -71,7 +71,7 @@
 ;; Pin the validated host and binding as one dependency graph.  In particular,
 ;; neither origin may fall back to a neighbouring development checkout.
 (define %guile-wayland-commit
-  "35eff2a28f9843dbdddeee2cc594788b72569bad")
+  "b9507aa9bc8f63e8c3969f453c94e6cb8bc71510")
 
 (define* (normalize-git-checkout checkout hash-algo hash
                                  #:optional name
@@ -102,13 +102,13 @@
 
 (define-public guile-wayland-dmenu
   (package/inherit guile-wayland-next
-    (version (git-version "0.0.2" "1" %guile-wayland-commit))
+    (version (git-version "0.0.2" "2" %guile-wayland-commit))
     (source
      (let ((source (dependency-source "GUILE_WAYLAND_SOURCE"
                                       %guile-wayland-commit)))
        (dependency-origin
         source %guile-wayland-commit
-        "0ykrcv5py9ig6m9jfxm9dnygwc24qli1ii866yfvigsx7jjz2dsl"
+        "04hy24c6889yv70qlxj369fc1njh17iacnjfismhs6i5dj3d1hjl"
         (git-file-name "guile-wayland" %guile-wayland-commit))))
     (arguments
      (cons* #:strip-binaries? #f
@@ -126,18 +126,18 @@
                           "#t")))))))))))
 
 (define %g-swing-commit
-  "f447747004b51949389a4bf2e0f5784d68d13e34")
+  "fb46a00bc2a9acdc7116aaea82b73be13cda9dfe")
 
 (define-public guile-g-swing-dmenu
   (package
     (name "guile-g-swing")
-    (version (git-version "0.1.0" "1" %g-swing-commit))
+    (version (git-version "0.1.0" "3" %g-swing-commit))
     (source
      (let ((source (dependency-source "GUILE_G_SWING_SOURCE"
                                       %g-swing-commit)))
        (dependency-origin
         source %g-swing-commit
-        "0dym6bbh2cvs5lhwhbf5jb75rvk6sjdg2a44kxib9d4gfz8dgy2y"
+        "1qh7labvfw1giqwvarlps8d7z6rwh532nmm8n5p8828w6mmva9yf"
         (git-file-name "g-swing" %g-swing-commit))))
     (build-system gnu-build-system)
     (arguments
@@ -249,7 +249,8 @@ declarative user-interface core for GNU Guile.")
                          ,(string-split (getenv "GI_TYPELIB_PATH") #\:))
                        `("LD_LIBRARY_PATH" ":" prefix
                          (,(string-append #$cairo "/lib")
-                          ,(string-append #$pango "/lib")))))
+                          ,(string-append #$pango "/lib")
+                          ,(string-append #$libxkbcommon "/lib")))))
                    (list dmenu approval questions mcp))))))))
       (native-inputs (list guile-3.0))
       (inputs (list bash-minimal guile-3.0))
@@ -260,6 +261,7 @@ declarative user-interface core for GNU Guile.")
                                guile-g-swing-dmenu
                                guile-wayland-dmenu
                                guile-xkbcommon
+                               libxkbcommon
                                pango))
       (home-page "https://git.sr.ht/~ngraves/guile-dmenu")
       (synopsis "Guile completing-read library and dynamic menu")

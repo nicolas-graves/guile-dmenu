@@ -18,9 +18,9 @@ wayland_source=${GUILE_WAYLAND_SOURCE:-$dependency_root/guile-wayland}
 export XDG_CACHE_HOME="$worker_cache"
 
 test "$(git -C "$swing_source" rev-parse HEAD)" = \
-  f447747004b51949389a4bf2e0f5784d68d13e34
+  fb46a00bc2a9acdc7116aaea82b73be13cda9dfe
 test "$(git -C "$wayland_source" rev-parse HEAD)" = \
-  35eff2a28f9843dbdddeee2cc594788b72569bad
+  b9507aa9bc8f63e8c3969f453c94e6cb8bc71510
 test -z "$(git -C "$swing_source" status --porcelain)"
 test -z "$(git -C "$wayland_source" status --porcelain)"
 
@@ -78,7 +78,7 @@ dirty_result=$(GUILE_G_SWING_SOURCE="$dirty_swing" \
 test "$dirty_result" = "$swing"
 
 case "$swing" in
-  /gnu/store/*-guile-g-swing-0.1.0-1.f447747) ;;
+  /gnu/store/*-guile-g-swing-0.1.0-3.fb46a00) ;;
   *) echo "unexpected g-swing package: $swing" >&2; exit 1 ;;
 esac
 

@@ -256,6 +256,12 @@
                (when (and width (positive? width)) (menu-width width)))
              (report-runtime-event! 'surface-configured)
              (report-startup-phase! 'first-frame-committed))
+            ((teardown-stage)
+             (let* ((payload (and (pair? arguments) (car arguments)))
+                    (stage (and (list? payload) (assq-ref payload 'stage))))
+               (when (symbol? stage)
+                 (report-runtime-event!
+                  (symbol-append 'teardown- stage)))))
             ((stop) (report-runtime-event! 'result-received))
             (else #t)))
         (catch #t
