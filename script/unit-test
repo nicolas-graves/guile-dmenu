@@ -2,7 +2,7 @@
 set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-if test -d "$project_dir/../dependencies/guile-vui"; then
+if test -d "$project_dir/../dependencies/g-swing"; then
   dependency_root=$(CDPATH= cd -- "$project_dir/../dependencies" && pwd)
 else
   dependency_root=$(CDPATH= cd -- "$project_dir/.." && pwd)
@@ -10,11 +10,11 @@ fi
 test_state=${GUILE_DMENU_TEST_STATE:-${TMPDIR:?TMPDIR must name writable test storage}/guile-dmenu-tests}
 GUILE_DMENU_TEST_STATE=$test_state
 worker_cache="$test_state/unit-cache"
-GUILE_VUI_SOURCE=${GUILE_VUI_SOURCE:-$dependency_root/guile-vui}
+GUILE_G_SWING_SOURCE=${GUILE_G_SWING_SOURCE:-$dependency_root/g-swing}
 GUILE_WAYLAND_SOURCE=${GUILE_WAYLAND_SOURCE:-$dependency_root/guile-wayland}
 mkdir -p "$worker_cache"
 XDG_CACHE_HOME="$worker_cache"
-export XDG_CACHE_HOME GUILE_VUI_SOURCE GUILE_WAYLAND_SOURCE GUILE_DMENU_TEST_STATE
+export XDG_CACHE_HOME GUILE_G_SWING_SOURCE GUILE_WAYLAND_SOURCE GUILE_DMENU_TEST_STATE
 
 "$project_dir/script/dependency-test"
 
@@ -47,7 +47,7 @@ guile --no-auto-compile -L "$project_dir/src" \
 guile --no-auto-compile -L "$project_dir/src" \
   "$project_dir/tests/question-command-test.scm"
 guile --no-auto-compile -L "$project_dir/src" \
-  "$project_dir/tests/vui-adapter-test.scm"
+  "$project_dir/tests/swing-adapter-test.scm"
 "$project_dir/tests/question-command-executable-test.sh"
 "$project_dir/tests/approval-command-test.sh"
 "$project_dir/tests/dmenu-cli-test.sh"

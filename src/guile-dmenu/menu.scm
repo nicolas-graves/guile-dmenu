@@ -3,8 +3,8 @@
   #:use-module (guile-dmenu graphics)
   #:use-module (guile-dmenu filter)
   #:use-module (guile-dmenu completion)
-  #:use-module (guile-dmenu vui-adapter)
-  #:use-module (vui guile-wayland)
+  #:use-module (guile-dmenu swing-adapter)
+  #:use-module (swing guile-wayland)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
@@ -56,8 +56,8 @@
          (hex (string-upcase (number->string byte 16))))
     (if (= (string-length hex) 1) (string-append "0" hex) hex)))
 
-(define (color->vui color)
-  "Convert guile-dmenu's normalized RGB triples to Guile-VUI hex colors."
+(define (color->swing color)
+  "Convert guile-dmenu's normalized RGB triples to G-Swing hex colors."
   (unless (and (list? color) (= (length color) 3) (every real? color))
     (error "expected an RGB color triple" color))
   (string-append "#" (string-concatenate (map color-component->hex color))))
@@ -74,7 +74,7 @@
                           (selection-mode 'text)
                           (initial-selected-index 0)
                           (completion-style 'substring))
-  "Run the production completing reader on guile-vui's Wayland host."
+  "Run the production completing reader on g-swing's Wayland host."
   (unless (memq selection-mode '(text menu menu-index))
     (error "unsupported selection mode" selection-mode))
   (unless (boolean? comment-on-tab?)
@@ -123,7 +123,7 @@
         (define (update-domain model state-key action domain-options
                                domain-collection domain-mode domain-input?)
           (let ((outcome
-                 (dispatch-completion-vui-action
+                 (dispatch-completion-swing-action
                   (model-ref model state-key) action
                   domain-options domain-collection
                   #:predicate predicate #:selection-mode domain-mode
@@ -192,7 +192,7 @@
                        (- (menu-width) (* 2 (menu-padding))
                           (* 2 (border-width))))
                       1)))
-            (completion-state->vui-tree
+            (completion-state->swing-tree
              (model-ref model 'state)
            #:prompt prompt #:maximum maximum #:message-lines (message-lines)
            #:option-details option-details
@@ -203,30 +203,30 @@
            #:width (menu-width) #:padding (menu-padding)
            #:row-height (item-height (menu-padding))
            #:fixed-height? (fixed-height?)
-           #:normal-background (color->vui (background-color))
-           #:normal-foreground (color->vui (foreground-color))
-           #:highlight-background (color->vui (highlight-background-color))
-           #:highlight-foreground (color->vui (highlight-foreground-color))
+           #:normal-background (color->swing (background-color))
+           #:normal-foreground (color->swing (foreground-color))
+           #:highlight-background (color->swing (highlight-background-color))
+           #:highlight-foreground (color->swing (highlight-foreground-color))
            #:filter-background (and (filter-background-color)
-                                    (color->vui (filter-background-color)))
+                                    (color->swing (filter-background-color)))
            #:filter-foreground (and (filter-foreground-color)
-                                    (color->vui (filter-foreground-color)))
-           #:cursor-color (and (cursor-color) (color->vui (cursor-color)))
+                                    (color->swing (filter-foreground-color)))
+           #:cursor-color (and (cursor-color) (color->swing (cursor-color)))
            #:title-background (and (title-background-color)
-                                   (color->vui (title-background-color)))
+                                   (color->swing (title-background-color)))
            #:title-foreground (and (title-foreground-color)
-                                   (color->vui (title-foreground-color)))
+                                   (color->swing (title-foreground-color)))
            #:alternate-background (and (alt-background-color)
-                                       (color->vui (alt-background-color)))
+                                       (color->swing (alt-background-color)))
            #:alternate-foreground (and (alt-foreground-color)
-                                       (color->vui (alt-foreground-color)))
-           #:border-color (color->vui (border-color))
+                                       (color->swing (alt-foreground-color)))
+           #:border-color (color->swing (border-color))
            #:border-width (border-width) #:selected-prefix (prefix-text)
              #:input-wrapping? (input-line-wrapping?)
              #:input-line-count input-lines)))
         (define (logical-size model)
           (let* ((snapshot
-                  (completion-state->vui-model
+                  (completion-state->swing-model
                    (model-ref model 'state) #:maximum maximum
                    #:message-lines (message-lines) #:option-details option-details
                    #:details-visible? (model-ref model 'details-visible?)
@@ -260,7 +260,7 @@
             (else #t)))
         (catch #t
           (lambda ()
-            (run-wayland-vui
+            (run-wayland-swing
              initial-model update view #:title "dmenu" #:app-id "wl-dmenu"
              #:logical-size logical-size #:route-key route-key #:pointer? #f
              #:font "monospace 14" #:timeout-action 'host-timeout

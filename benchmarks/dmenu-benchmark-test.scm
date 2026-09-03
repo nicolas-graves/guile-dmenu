@@ -2,13 +2,13 @@
   #:use-module (ares suitbl)
   #:use-module (guile-dmenu filter)
   #:use-module (guile-dmenu graphics)
-  #:use-module (guile-dmenu vui-adapter)
+  #:use-module (guile-dmenu swing-adapter)
   #:use-module (guile-performance-harness)
   #:use-module (guile-performance-harness suitbl)
   #:use-module (ice-9 ftw)
   #:use-module (ice-9 rdelim)
   #:use-module (srfi srfi-1)
-  #:use-module (vui layout)
+  #:use-module (swing layout)
   #:export (dmenu-benchmark-tests))
 
 (define %project-directory
@@ -134,7 +134,7 @@
      (measure
       (lambda ()
         (layout-tree
-         (completion-state->vui-tree
+         (completion-state->swing-tree
           state #:prompt "dmenu: " #:maximum rows
           #:width 800 #:padding 4)
          #:width 800 #:height (menu-height 4 size rows)))))))

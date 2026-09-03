@@ -23,10 +23,10 @@ window creation, and the first committed frame.  Normal command output and
 behavior are unchanged when tracing is disabled.
 
 The production UI is declarative: guile-dmenu owns completion state, actions,
-and dmenu-specific presentation parameters, while guile-vui owns input,
+and dmenu-specific presentation parameters, while g-swing owns input,
 Pango/Cairo rendering, Wayland lifecycle, scaling, and shared-memory buffers.
 Guile-wayland remains the low-level generated protocol binding used by
-guile-vui; guile-dmenu does not maintain a second compositor stack.
+g-swing; guile-dmenu does not maintain a second compositor stack.
 
 Structured questions can now drive real graphical sessions through
 ~(guile-dmenu structured-prompt)~:
@@ -149,7 +149,7 @@ timeouts are passed through unchanged.  Each graphical request runs in a
 one-shot child process; the persistent MCP server remains available for pings,
 cancellation, and subsequent questions.
 
-Guile-vui owns Wayland setup and event processing.  A connection or startup
+G-Swing owns Wayland setup and event processing.  A connection or startup
 exception is converted to a terminal ~graphical-failure~ result.  The parent
 also enforces the request deadline, terminates and reaps a stuck child, and
 suppresses late responses after cancellation.
@@ -191,7 +191,7 @@ in your Sway configuration for the expected result (otherwise Sway will take ove
 - [X] Basic personalization: colors, prefix, border, wrap, item count, fixed
   height, line height (see "Configuration" below)
 - [X] Supplementary Unicode keyboard input
-- [X] Unicode shaping, measurement, and font fallback through guile-vui Pango
+- [X] Unicode shaping, measurement, and font fallback through g-swing Pango
 - [ ] Strict compatibility with the bemenu API/configuration library is not
   planned; see the comparison table above.
 - [X] Repeat
@@ -235,7 +235,7 @@ dmenu -p 'run: ' -w -l 10 -P '> ' -B 1 \
   badge), ~--ab/--af~ (alternating row), ~--bdr~ (border).
 
 The complete release proof is available as ~script/release-gate~.  It fails
-closed unless explicit pinned guile-vui/guile-wayland checkouts, a private
+closed unless explicit pinned g-swing/guile-wayland checkouts, a private
 River fixture, worker-local state, and a short private runtime directory are
 provided through the environment variables named by the script.
 

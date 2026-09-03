@@ -1,18 +1,18 @@
 (use-modules (guile-dmenu filter)
-             (guile-dmenu vui-adapter)
+             (guile-dmenu swing-adapter)
              (srfi srfi-1)
              (srfi srfi-64)
-             (vui element)
-             (vui input)
-             (vui layout)
-             (vui runtime)
-             (vui style))
+             (swing element)
+             (swing input)
+             (swing layout)
+             (swing runtime)
+             (swing style))
 
-(test-begin "vui-adapter")
+(test-begin "swing-adapter")
 
 (define state (make-completing-read-state "a" 1 '("alpha" "beta") 1))
-(define model (completion-state->vui-model state))
-(define tree (completion-model->vui-tree model))
+(define model (completion-state->swing-model state))
+(define tree (completion-model->swing-tree model))
 (define input-row (car (element-children tree)))
 (define candidates (car (filter (lambda (node)
                                   (eq? (element-key node) 'candidates))
@@ -50,14 +50,14 @@
 
 (let* ((styled-state (make-completing-read-state "query" 2 '("zero" "one" "two")))
        (styled-model
-        (completion-state->vui-model
+        (completion-state->swing-model
          styled-state #:row-height 27 #:filter-background 'filter-bg
          #:filter-foreground 'filter-fg #:cursor-color 'caret
          #:title-background 'title-bg #:title-foreground 'title-fg
          #:alternate-background 'alternate-bg #:alternate-foreground 'alternate-fg
          #:border-color 'edge #:border-width 3 #:selected-prefix "» "
          #:input-wrapping? #t #:input-line-count 3))
-       (styled-tree (completion-model->vui-tree styled-model))
+       (styled-tree (completion-model->swing-tree styled-model))
        (prompt-node (car (element-children styled-tree)))
        (input-node (cadr (element-children styled-tree)))
        (styled-list (car (filter (lambda (node) (eq? (element-key node) 'candidates))
@@ -71,7 +71,7 @@
            title-background title-foreground alternate-background
            alternate-foreground border-color border-width selected-prefix
            input-wrapping? input-line-count)))
-  (test-equal "title, filter, cursor, border, and wrapping reach VUI styles"
+  (test-equal "title, filter, cursor, border, and wrapping reach Swing styles"
     '(title-bg title-fg filter-bg filter-fg caret edge 3 81)
     (list (style-ref (element-style prompt-node) 'background-color)
           (style-ref (element-style prompt-node) 'color)
@@ -101,14 +101,14 @@
 
 (let* ((paged-state (make-completing-read-state
                      "λ" 7 '("零" "一" "二" "三" "四" "五" "六" "七")))
-       (paged (completion-state->vui-model
+       (paged (completion-state->swing-model
                paged-state #:prompt "選択 ›" #:maximum 3
                #:width 512 #:padding 7)))
   (test-equal "paging retains absolute selection and fills final page"
     '(5 7 2 ("五" "六" "七"))
     (map (lambda (key) (assq-ref paged key))
          '(visible-start selected-index visible-selected-index visible-options)))
-  (let* ((paged-tree (completion-model->vui-tree paged))
+  (let* ((paged-tree (completion-model->swing-tree paged))
          (list-node (car (filter (lambda (node)
                                   (eq? (element-key node) 'candidates))
                                 (element-children paged-tree)))))
@@ -119,9 +119,9 @@
            '(width padding)))))
 
 (let* ((empty (make-completing-read-state "∅" 0 '()))
-       (empty-model (completion-state->vui-model
+       (empty-model (completion-state->swing-model
                      empty #:maximum 4 #:row-height 31 #:fixed-height? #t))
-       (empty-tree (completion-model->vui-tree empty-model))
+       (empty-tree (completion-model->swing-tree empty-model))
        (empty-candidates (car (filter (lambda (node)
                                         (eq? (element-key node) 'candidates))
                                       (element-children empty-tree)))))
@@ -137,9 +137,9 @@
          (element-children empty-candidates))))
 
 (let* ((short-state (make-completing-read-state "" 0 '("one" "two")))
-       (short-model (completion-state->vui-model
+       (short-model (completion-state->swing-model
                      short-state #:maximum 4 #:row-height 29 #:fixed-height? #t))
-       (short-tree (completion-model->vui-tree short-model))
+       (short-tree (completion-model->swing-tree short-model))
        (short-candidates (car (filter (lambda (node)
                                         (eq? (element-key node) 'candidates))
                                       (element-children short-tree)))))
@@ -161,9 +161,9 @@
                                (values 10 7)))))))
 
 (let* ((zero-state (make-completing-read-state "" 0 '("one")))
-       (zero-model (completion-state->vui-model
+       (zero-model (completion-state->swing-model
                     zero-state #:maximum 2 #:row-height 0 #:fixed-height? #t))
-       (zero-tree (completion-model->vui-tree zero-model))
+       (zero-tree (completion-model->swing-tree zero-model))
        (zero-candidates (car (filter (lambda (node)
                                        (eq? (element-key node) 'candidates))
                                      (element-children zero-tree)))))
@@ -174,7 +174,7 @@
                      'height))))
 
 (let* ((details-state (make-completing-read-state "" 1 '("Fast" "Safe")))
-       (details (completion-state->vui-model
+       (details (completion-state->swing-model
                  details-state #:message-lines '("Choose")
                  #:option-details '("quick" "careful")
                  #:details-visible? #t)))
@@ -184,7 +184,7 @@
 
 (let* ((menu-state (make-completing-read-state "" 1 '("Fast" "Safe")))
        (editor (make-completing-read-state "理由" 2 '()))
-       (comment (completion-state->vui-model
+       (comment (completion-state->swing-model
                  menu-state #:prompt "Mode?" #:message-lines '("keys" "context")
                  #:comment-state editor #:comment-index 1)))
   (test-equal "comment mode replaces prompt/input while preserving selection"
@@ -198,18 +198,18 @@
 
 (let* ((confirm-state (make-completing-read-state
                        "yes" 0 '("yes") 3 "yes"))
-       (confirm (completion-state->vui-model confirm-state)))
+       (confirm (completion-state->swing-model confirm-state)))
   (test-equal "confirmation mode has a deterministic visible instruction"
     '("Confirm submission with RET") (assq-ref confirm 'message-lines)))
 
 (test-equal "actions map to existing events"
   '(select next previous complete cancel
            (replace-input "xy" 1) (input-char #\x) #f)
-  (map vui-action->completion-event
+  (map swing-action->completion-event
        '(accept move-next move-previous complete-next escape
                 (replace-input "xy" 1) (input-char #\x) unknown)))
 
-(test-equal "normalized VUI keys preserve the complete legacy key contract"
+(test-equal "normalized Swing keys preserve the complete legacy key contract"
   '(cancel cancel cancel select select complete complete-previous
            complete-previous left right home end next previous next previous
            next-default previous-default backspace ctrl+backspace
@@ -225,19 +225,19 @@
          (F1 "" ()) (compose "ab" ()))))
 
 (define (controller-press+repeat initial decoded options selection-mode)
-  "Drive one physical press and its scheduled repeat through VUI's controller."
+  "Drive one physical press and its scheduled repeat through Swing's controller."
   (let ((callback #f) (actions '()) (outcomes '()))
     (define (update current action)
       (set! actions (append actions (list action)))
-      (let ((outcome (dispatch-completion-vui-action
+      (let ((outcome (dispatch-completion-swing-action
                       current action options options
                       #:selection-mode selection-mode)))
         (set! outcomes (append outcomes (list outcome)))
         (if (eq? (car outcome) 'state-update) (cadr outcome) current)))
     (define app
-      (make-vui-app initial update
+      (make-swing-app initial update
                     (lambda (current)
-                      (completion-state->vui-tree current #:maximum 2))))
+                      (completion-state->swing-tree current #:maximum 2))))
     (define input
       (make-input-controller
        app
@@ -248,7 +248,7 @@
                                (set! callback repeat)
                                'repeat-token))
          (cancel-repeat . ,(lambda (_token) #t)))
-       (lambda () (layout-tree (vui-view app) #:width 320 #:height 200))
+       (lambda () (layout-tree (swing-view app) #:width 320 #:height 200))
        #:route-key route-key))
     (input-keymap! input 'fixture-keymap)
     (input-key! input 9 #t)
@@ -256,7 +256,7 @@
     (callback)
     (input-key! input 9 #f)
     (input-close! input)
-    (list actions outcomes (vui-model app))))
+    (list actions outcomes (swing-model app))))
 
 (define (state-summary state)
   (list (completing-read-state-input-text state)
@@ -284,7 +284,7 @@
                (controller-press+repeat (list-ref case 1) (list-ref case 2)
                                         options (list-ref case 3)))
              cases)))
-  (test-equal "VUI press and repeat route the same complete action classes"
+  (test-equal "Swing press and repeat route the same complete action classes"
     '(((input-text "x") (input-text "x"))
       (backspace backspace) (left left) (complete complete)
       (next next) (select select) (cancel cancel))
@@ -303,7 +303,7 @@
   (route-key 'a "a" '(control 1)))
 
 (let* ((initial (make-completing-read-state "ac" 0 '("abc" "ac") 1))
-       (inserted (dispatch-completion-vui-action
+       (inserted (dispatch-completion-swing-action
                   initial (route-key 'compose "界β" '())
                   '("abc" "ac") '("abc" "ac")))
        (updated (cadr inserted)))
@@ -316,9 +316,9 @@
 
 (let* ((options '("alpha" "alpine"))
        (initial (make-completing-read-state "al" 0 options 2))
-       (completed (dispatch-completion-vui-action
+       (completed (dispatch-completion-swing-action
                    initial (route-key 'Tab "" '()) options options))
-       (moved (dispatch-completion-vui-action
+       (moved (dispatch-completion-swing-action
                (cadr completed) (route-key 'Left "" '()) options options)))
   (test-equal "completion and cursor movement remain domain transitions"
     '(state-update "alp" 2 #f)
@@ -339,7 +339,7 @@
         (route-key 'x "x" '(alt shift))
         (route-key 'A "A" '(shift))))
 
-(let ((result (dispatch-completion-vui-action
+(let ((result (dispatch-completion-swing-action
                (make-completing-read-state "a" 0 '("alpha" "beta"))
                '(replace-input "be" 1) '("alpha" "beta") '("alpha" "beta"))))
   (test-equal "replace-input delegates filtering and cursor state"
@@ -353,16 +353,16 @@
 (define fresh (make-completing-read-state "" 0 '("a" "b")))
 (test-equal "navigation is delegated to domain transition" 1
   (completing-read-state-selected-index
-   (cadr (dispatch-completion-vui-action fresh 'next '("a" "b") '("a" "b")
+   (cadr (dispatch-completion-swing-action fresh 'next '("a" "b") '("a" "b")
                                          #:selection-mode 'menu))))
 (test-equal "acceptance preserves domain result" '(selected "a")
-  (dispatch-completion-vui-action fresh 'accept '("a" "b") '("a" "b")
+  (dispatch-completion-swing-action fresh 'accept '("a" "b") '("a" "b")
                                   #:selection-mode 'menu))
 (test-equal "cancellation remains terminal and distinct" '(cancelled)
-  (dispatch-completion-vui-action fresh 'cancel '("a" "b") '("a" "b")))
+  (dispatch-completion-swing-action fresh 'cancel '("a" "b") '("a" "b")))
 (test-equal "unknown actions are deterministic no-ops" 'no-change
-  (car (dispatch-completion-vui-action fresh 'unknown '("a" "b") '("a" "b"))))
+  (car (dispatch-completion-swing-action fresh 'unknown '("a" "b") '("a" "b"))))
 
 (let ((runner (test-runner-current)))
-  (test-end "vui-adapter")
+  (test-end "swing-adapter")
   (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1)))

@@ -125,20 +125,20 @@
                          (("\\(bs-keep-alive! obj callback\\)")
                           "#t")))))))))))
 
-(define %guile-vui-commit
-  "ae9714030687cd867951ecf3499526d45295d8e7")
+(define %g-swing-commit
+  "f447747004b51949389a4bf2e0f5784d68d13e34")
 
-(define-public guile-vui-dmenu
+(define-public guile-g-swing-dmenu
   (package
-    (name "guile-vui")
-    (version (git-version "0.1.0" "1" %guile-vui-commit))
+    (name "guile-g-swing")
+    (version (git-version "0.1.0" "1" %g-swing-commit))
     (source
-     (let ((source (dependency-source "GUILE_VUI_SOURCE"
-                                      %guile-vui-commit)))
+     (let ((source (dependency-source "GUILE_G_SWING_SOURCE"
+                                      %g-swing-commit)))
        (dependency-origin
-        source %guile-vui-commit
-        "17j5hd5q9jwsqm7g1w527wz9xv4iphb4k66cj87jip0ff66kl1lk"
-        (git-file-name "guile-vui" %guile-vui-commit))))
+        source %g-swing-commit
+        "0dym6bbh2cvs5lhwhbf5jb75rvk6sjdg2a44kxib9d4gfz8dgy2y"
+        (git-file-name "g-swing" %g-swing-commit))))
     (build-system gnu-build-system)
     (arguments
      (list
@@ -179,9 +179,9 @@
            (search-path-specification
             (variable "LD_LIBRARY_PATH")
             (files '("lib")))))
-    (home-page "https://codeberg.org/igorge/guile-vui")
+    (home-page "https://codeberg.org/igorge/g-swing")
     (synopsis "Declarative user-interface core for Guile")
-    (description "Guile-VUI provides a deterministic, compositor-independent
+    (description "G-Swing provides a deterministic, compositor-independent
 declarative user-interface core for GNU Guile.")
     (license license:gpl3+)))
 
@@ -201,8 +201,8 @@ declarative user-interface core for GNU Guile.")
          (tracked? (git-predicate dir))
          (d1.2-source-files
           (map (lambda (file) (string-append dir "/" file))
-               '("src/guile-dmenu/vui-adapter.scm"
-                 "tests/vui-adapter-test.scm")))
+               '("src/guile-dmenu/swing-adapter.scm"
+                 "tests/swing-adapter-test.scm")))
          (repo (repository-open dir))
          (head (repository-head repo))
          (oid (reference-target head))
@@ -257,7 +257,7 @@ declarative user-interface core for GNU Guile.")
                                guile-g-golf
                                guile-fibers
                                guile-json-4
-                               guile-vui-dmenu
+                               guile-g-swing-dmenu
                                guile-wayland-dmenu
                                guile-xkbcommon
                                pango))

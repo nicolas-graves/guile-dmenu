@@ -2,7 +2,7 @@
 ;;; SPDX-License-Identifier: GPL-3.0-or-later
 
 (define-module (guile-dmenu graphics)
-  #:use-module (vui pango)
+  #:use-module (swing pango)
   #:use-module (srfi srfi-1)
   #:export (wrap-message-lines
             wrap-message-to-width
@@ -109,7 +109,7 @@
   (text-measurement-line-count
    (pango-measure %pango-service text #:width (max 1 width))))
 
-;; Produce the strings consumed by the VUI tree while using the same shaping
+;; Produce the strings consumed by the Swing tree while using the same shaping
 ;; service as its renderer. Prefer whitespace boundaries, but always make
 ;; progress for paths and other unbroken strings.
 (define (wrap-line-to-width line maximum-width)

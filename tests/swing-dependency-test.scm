@@ -1,18 +1,18 @@
 (use-modules (srfi srfi-1)
              (srfi srfi-13)
              (srfi srfi-64)
-             (vui)
-             (vui guile-wayland)
+             (swing)
+             (swing guile-wayland)
              (wayland client display))
 
-(test-begin "vui-dependency")
+(test-begin "swing-dependency")
 
-(define vui-source
-  (canonicalize-path (search-path %load-path "vui.scm")))
+(define swing-source
+  (canonicalize-path (search-path %load-path "swing.scm")))
 (define wayland-source
   (canonicalize-path
    (search-path %load-path "wayland/client/display.scm")))
-(define vui-package (getenv "GUILE_VUI_PACKAGE"))
+(define swing-package (getenv "GUILE_G_SWING_PACKAGE"))
 (define wayland-package (getenv "GUILE_WAYLAND_PACKAGE"))
 (define (package-provides-source? package source)
   (and package
@@ -32,15 +32,15 @@
   (filter-map (lambda (name)
                 (let ((value (getenv name)))
                   (and value (not (string-null? value)) value)))
-              '("GUILE_DMENU_CHECKOUT" "GUILE_VUI_CHECKOUT"
+              '("GUILE_DMENU_CHECKOUT" "GUILE_G_SWING_CHECKOUT"
                 "GUILE_WAYLAND_CHECKOUT")))
 
-(test-assert "VUI resolves from a Guix store package"
-  (package-provides-source? vui-package vui-source))
-(test-assert "generic store root is not exact VUI package provenance"
-  (not (package-provides-source? "/gnu/store" vui-source)))
-(test-assert "VUI does not resolve from an ambient checkout"
-  (every (lambda (prefix) (not (string-prefix? prefix vui-source)))
+(test-assert "Swing resolves from a Guix store package"
+  (package-provides-source? swing-package swing-source))
+(test-assert "generic store root is not exact Swing package provenance"
+  (not (package-provides-source? "/gnu/store" swing-source)))
+(test-assert "Swing does not resolve from an ambient checkout"
+  (every (lambda (prefix) (not (string-prefix? prefix swing-source)))
          forbidden-prefixes))
 (test-assert "guile-wayland resolves from a Guix store package"
   (package-provides-source? wayland-package wayland-source))
@@ -49,9 +49,9 @@
 (test-assert "guile-wayland does not resolve from an ambient checkout"
   (every (lambda (prefix) (not (string-prefix? prefix wayland-source)))
          forbidden-prefixes))
-(test-equal "validated VUI API version" "0.1.0" (vui-version))
-(test-assert "validated Wayland host API is present" (procedure? run-wayland-vui))
+(test-equal "validated Swing API version" "0.1.0" (swing-version))
+(test-assert "validated Wayland host API is present" (procedure? run-wayland-swing))
 
 (let ((runner (test-runner-current)))
-  (test-end "vui-dependency")
+  (test-end "swing-dependency")
   (primitive-exit (if (zero? (test-runner-fail-count runner)) 0 1)))

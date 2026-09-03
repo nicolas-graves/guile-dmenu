@@ -324,7 +324,7 @@
   '("alpha" "beta" "gamma")
   (wrap-message-lines "alpha beta gamma" 6))
 
-(test-assert "pixel wrapping uses VUI Pango metrics"
+(test-assert "pixel wrapping uses Swing Pango metrics"
   (> (length (wrap-message-to-width
               "WWWWWWWWWWWWWWWWWWWWWWWW with measured wrapping"
               80 4))

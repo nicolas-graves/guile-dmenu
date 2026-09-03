@@ -1,24 +1,24 @@
-(define-module (guile-dmenu vui-adapter)
+(define-module (guile-dmenu swing-adapter)
   #:use-module (guile-dmenu filter)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
-  #:use-module (vui element)
-  #:use-module (vui style)
-  #:export (completion-state->vui-model
-            completion-model->vui-tree
-            completion-state->vui-tree
+  #:use-module (swing element)
+  #:use-module (swing style)
+  #:export (completion-state->swing-model
+            completion-model->swing-tree
+            completion-state->swing-tree
             route-key
-            vui-action->completion-event
-            dispatch-completion-vui-action))
+            swing-action->completion-event
+            dispatch-completion-swing-action))
 
 (define (route-key symbol text modifiers)
-  "Translate one normalized VUI key press to guile-dmenu's action vocabulary.
+  "Translate one normalized Swing key press to guile-dmenu's action vocabulary.
 Return #f for modified/non-text keys that guile-dmenu intentionally consumes.
-The function is pure so the VUI input controller can use it identically for
+The function is pure so the Swing input controller can use it identically for
 the initial press and every repeat without acquiring completion state."
   (unless (and (symbol? symbol) (string? text) (list? modifiers)
                (every symbol? modifiers))
-    (error "invalid normalized VUI key" symbol text modifiers))
+    (error "invalid normalized Swing key" symbol text modifiers))
   (let ((control? (and (memq 'control modifiers) #t))
         (alt? (and (memq 'alt modifiers) #t))
         (shift? (and (memq 'shift modifiers) #t)))
@@ -66,7 +66,7 @@ the initial press and every repeat without acquiring completion state."
          (length (min maximum (- count start))))
     (values start (take (drop options start) length))))
 
-(define* (completion-state->vui-model state
+(define* (completion-state->swing-model state
                                       #:key (prompt "") (maximum 10)
                                       (message-lines '()) (option-details #f)
                                       (details-visible? #f) (input-enabled? #t)
@@ -182,7 +182,7 @@ the initial press and every repeat without acquiring completion state."
          (completion-metadata . ,(completing-read-state-completion-metadata state))
          (completion-boundaries . ,(completing-read-state-completion-boundaries state)))))))))
 
-(define (completion-model->vui-tree model)
+(define (completion-model->swing-tree model)
   "Express a completion snapshot as a deterministic, presentation-neutral tree."
   (let* ((selected (assq-ref model 'selected-index))
          (start (assq-ref model 'visible-start))
@@ -266,12 +266,12 @@ the initial press and every repeat without acquiring completion state."
         #:key 'candidates)))
      #:key 'completion #:style root-style)))
 
-(define* (completion-state->vui-tree state #:rest presentation)
-  (completion-model->vui-tree
-   (apply completion-state->vui-model state presentation)))
+(define* (completion-state->swing-tree state #:rest presentation)
+  (completion-model->swing-tree
+   (apply completion-state->swing-model state presentation)))
 
-(define (vui-action->completion-event action)
-  "Translate a completion VUI action to the established domain event vocabulary."
+(define (swing-action->completion-event action)
+  "Translate a completion Swing action to the established domain event vocabulary."
   (match action
     ((or 'select 'accept) 'select)
     ((or 'next 'move-next) 'next)
@@ -289,18 +289,18 @@ the initial press and every repeat without acquiring completion state."
      event)
     (_ #f)))
 
-(define* (dispatch-completion-vui-action state action options collection
+(define* (dispatch-completion-swing-action state action options collection
                                          #:key (predicate #f)
                                          (selection-mode 'text)
                                          (require-match #f)
                                          (style 'substring)
                                          (input-enabled? #t))
   "Translate ACTION and delegate all completion semantics to the domain layer."
-  (let ((event (vui-action->completion-event action)))
+  (let ((event (swing-action->completion-event action)))
     (cond ((eq? event 'cancel) (list 'cancelled))
           ((not event) (list 'no-change state))
           ((and (pair? event) (eq? (car event) 'input-text))
-           ;; VUI's normalized text may contain more than one character (for
+           ;; Swing's normalized text may contain more than one character (for
            ;; example from compose).  Replay it through the domain's existing
            ;; character transition so filtering and cursor ownership stay in
            ;; guile-dmenu and no normalized text is discarded.

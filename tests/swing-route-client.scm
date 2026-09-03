@@ -1,11 +1,11 @@
-;;; Private-compositor exercise for guile-dmenu's VUI keyboard boundary.
+;;; Private-compositor exercise for guile-dmenu's Swing keyboard boundary.
 ;;; SPDX-License-Identifier: GPL-3.0-or-later
 
 (use-modules (guile-dmenu filter)
-             (guile-dmenu vui-adapter)
+             (guile-dmenu swing-adapter)
              (ice-9 match)
              (srfi srfi-1)
-             (vui guile-wayland))
+             (swing guile-wayland))
 
 (define scenario
   (match (command-line)
@@ -50,7 +50,7 @@
       (_
        (let* ((comment? (eq? mode 'comment))
               (current (if comment? (field model 'comment-state) state))
-              (result (dispatch-completion-vui-action
+              (result (dispatch-completion-swing-action
                        current action (if comment? '() options)
                        (if comment? '() options)
                        #:selection-mode (if comment? 'text 'menu)
@@ -60,7 +60,7 @@
              model))))))
 
 (define (view model)
-  (completion-state->vui-tree
+  (completion-state->swing-tree
    (field model 'state) #:prompt "D2.2" #:maximum 2
    #:option-details '("first detail" "second detail")
    #:details-visible? (eq? (field model 'mode) 'details)
@@ -71,7 +71,7 @@
                          (field model 'state)))))
 
 (define answer
-  (run-wayland-vui
+  (run-wayland-swing
    initial update view #:title "guile-dmenu D2.2 route fixture"
    #:app-id "org.guile-dmenu.d22-route-fixture"
    #:logical-size (lambda (_) '(640 180)) #:route-key route-key
