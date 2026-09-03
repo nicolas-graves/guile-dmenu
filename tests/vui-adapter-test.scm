@@ -156,6 +156,76 @@
        '(accept move-next move-previous complete-next escape
                 (replace-input "xy" 1) (input-char #\x) unknown)))
 
+(test-equal "normalized VUI keys preserve the complete legacy key contract"
+  '(cancel cancel cancel select select complete complete-previous
+           complete-previous left right home end next previous next previous
+           next-default previous-default backspace ctrl+backspace
+           (input-text "界") #f #f (input-text "ab"))
+  (map (lambda (input) (apply route-key input))
+       '((Escape "" ()) (c "c" (control)) (g "g" (control))
+         (Return "" ()) (KP_Enter "" ()) (Tab "" ())
+         (Tab "" (shift)) (ISO_Left_Tab "" (shift))
+         (Left "" ()) (Right "" ()) (Home "" ()) (End "" ())
+         (Down "" ()) (Up "" ()) (n "n" (control)) (p "p" (control))
+         (n "n" (alt)) (p "p" (alt)) (BackSpace "" ())
+         (BackSpace "" (control)) (u "界" ()) (u "u" (alt))
+         (F1 "" ()) (compose "ab" ()))))
+
+(test-equal "repeat routing is pure and preserves candidate paging semantics"
+  '(1 2 3 4)
+  (let loop ((remaining 4)
+             (current (make-completing-read-state
+                       "" 0 '("zero" "one" "two" "three" "four"))))
+    (if (zero? remaining)
+        '()
+        (let ((next (cadr (dispatch-completion-vui-action
+                           current (route-key 'Down "" '())
+                           '("zero" "one" "two" "three" "four")
+                           '("zero" "one" "two" "three" "four")
+                           #:selection-mode 'menu))))
+          (cons (completing-read-state-selected-index next)
+                (loop (- remaining 1) next))))))
+
+(test-error "route-key rejects malformed normalized input" #t
+  (route-key 'a "a" '(control 1)))
+
+(let* ((initial (make-completing-read-state "ac" 0 '("abc" "ac") 1))
+       (inserted (dispatch-completion-vui-action
+                  initial (route-key 'compose "界β" '())
+                  '("abc" "ac") '("abc" "ac")))
+       (updated (cadr inserted)))
+  (test-equal "normalized compose text edits at the domain-owned cursor"
+    '(state-update "a界βc" 3 ())
+    (list (car inserted)
+          (completing-read-state-input-text updated)
+          (completing-read-state-cursor-position updated)
+          (completing-read-state-filtered-options updated))))
+
+(let* ((options '("alpha" "alpine"))
+       (initial (make-completing-read-state "al" 0 options 2))
+       (completed (dispatch-completion-vui-action
+                   initial (route-key 'Tab "" '()) options options))
+       (moved (dispatch-completion-vui-action
+               (cadr completed) (route-key 'Left "" '()) options options)))
+  (test-equal "completion and cursor movement remain domain transitions"
+    '(state-update "alp" 2 #f)
+    (list (car completed)
+          (completing-read-state-input-text (cadr completed))
+          (completing-read-state-cursor-position (cadr moved))
+          (completing-read-state-completion-invoked? (cadr moved)))))
+
+(test-equal "Tab routes details and comment workflows for their controller"
+  '(complete complete complete-previous)
+  (list (route-key 'Tab "" '())
+        (route-key 'Tab "" '())
+        (route-key 'ISO_Left_Tab "" '(shift))))
+
+(test-equal "modified text is consumed except Shift-produced text"
+  '(#f #f (input-text "A"))
+  (list (route-key 'x "x" '(control shift))
+        (route-key 'x "x" '(alt shift))
+        (route-key 'A "A" '(shift))))
+
 (let ((result (dispatch-completion-vui-action
                (make-completing-read-state "a" 0 '("alpha" "beta"))
                '(replace-input "be" 1) '("alpha" "beta") '("alpha" "beta"))))

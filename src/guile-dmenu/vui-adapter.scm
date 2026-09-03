@@ -7,8 +7,44 @@
   #:export (completion-state->vui-model
             completion-model->vui-tree
             completion-state->vui-tree
+            route-key
             vui-action->completion-event
             dispatch-completion-vui-action))
+
+(define (route-key symbol text modifiers)
+  "Translate one normalized VUI key press to guile-dmenu's action vocabulary.
+Return #f for modified/non-text keys that guile-dmenu intentionally consumes.
+The function is pure so the VUI input controller can use it identically for
+the initial press and every repeat without acquiring completion state."
+  (unless (and (symbol? symbol) (string? text) (list? modifiers)
+               (every symbol? modifiers))
+    (error "invalid normalized VUI key" symbol text modifiers))
+  (let ((control? (and (memq 'control modifiers) #t))
+        (alt? (and (memq 'alt modifiers) #t))
+        (shift? (and (memq 'shift modifiers) #t)))
+    (cond
+     ((or (eq? symbol 'Escape)
+          (and control? (memq symbol '(c g))))
+      'cancel)
+     ((memq symbol '(Return KP_Enter)) 'select)
+     ((or (eq? symbol 'ISO_Left_Tab)
+          (and (eq? symbol 'Tab) shift?))
+      'complete-previous)
+     ((eq? symbol 'Tab) 'complete)
+     ((eq? symbol 'Left) 'left)
+     ((eq? symbol 'Right) 'right)
+     ((eq? symbol 'Home) 'home)
+     ((eq? symbol 'End) 'end)
+     ((and alt? (eq? symbol 'n)) 'next-default)
+     ((and alt? (eq? symbol 'p)) 'previous-default)
+     ((or (eq? symbol 'Down) (and control? (eq? symbol 'n))) 'next)
+     ((or (eq? symbol 'Up) (and control? (eq? symbol 'p))) 'previous)
+     ((eq? symbol 'BackSpace)
+      (if control? 'ctrl+backspace 'backspace))
+     ((or control? alt?) #f)
+     ((not (string-null? text))
+      (list 'input-text text))
+     (else #f))))
 
 (define (copy-tree value)
   (cond ((string? value) (string-copy value))
@@ -168,6 +204,8 @@
     (('replace-input (? string? value) (? exact-integer? cursor))
      (list 'replace-input value cursor))
     (('input-char (? char? character)) (list 'input-char character))
+    (('input-text (? string? text))
+     (and (not (string-null? text)) (list 'input-text text)))
     ((and (or 'left 'right 'home 'end 'backspace 'ctrl+backspace
               'next-default 'previous-default) event)
      event)
@@ -183,6 +221,22 @@
   (let ((event (vui-action->completion-event action)))
     (cond ((eq? event 'cancel) (list 'cancelled))
           ((not event) (list 'no-change state))
+          ((and (pair? event) (eq? (car event) 'input-text))
+           ;; VUI's normalized text may contain more than one character (for
+           ;; example from compose).  Replay it through the domain's existing
+           ;; character transition so filtering and cursor ownership stay in
+           ;; guile-dmenu and no normalized text is discarded.
+           (fold (lambda (character result)
+                   (if (eq? (car result) 'state-update)
+                       (dispatch-completing-read-event
+                        (cadr result) (list 'input-char character)
+                        options collection #:predicate predicate
+                        #:selection-mode selection-mode
+                        #:require-match require-match #:style style
+                        #:input-enabled? input-enabled?)
+                       result))
+                 (list 'state-update state)
+                 (string->list (cadr event))))
           (else
            (dispatch-completing-read-event
             state event options collection
