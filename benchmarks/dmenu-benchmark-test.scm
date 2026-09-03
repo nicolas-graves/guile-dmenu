@@ -1,13 +1,14 @@
 (define-module (benchmarks dmenu-benchmark-test)
   #:use-module (ares suitbl)
-  #:use-module (cairo)
   #:use-module (guile-dmenu filter)
   #:use-module (guile-dmenu graphics)
+  #:use-module (guile-dmenu vui-adapter)
   #:use-module (guile-performance-harness)
   #:use-module (guile-performance-harness suitbl)
   #:use-module (ice-9 ftw)
   #:use-module (ice-9 rdelim)
   #:use-module (srfi srfi-1)
+  #:use-module (vui layout)
   #:export (dmenu-benchmark-tests))
 
 (define %project-directory
@@ -122,27 +123,21 @@
 
 (define %rendering
   (make-benchmark
-   #:name "dmenu-render-visible-rows" #:dimensions (append %sizes '((10 50)))
+   #:name "dmenu-layout-visible-rows" #:dimensions (append %sizes '((10 50)))
    #:warmup-count 1 #:sample-count 5 #:deadline 20
    #:collect-guile-metrics? #t
    #:setup
    (lambda (size rows)
-     (let* ((surface (cairo-image-surface-create
-                      'argb32 800 (menu-height 4 size rows)))
-            (context (cairo-create surface)))
-       (list (make-candidates size) surface context)))
+     (initial-state (make-candidates size)))
    #:operation
-   (lambda (fixture _size rows)
+   (lambda (state size rows)
      (measure
       (lambda ()
-        (draw-menu-to-cairo-context
-         (caddr fixture) 800 (menu-height 4 (length (car fixture)) rows) 4
-         "dmenu: " "" 0 (car fixture) rows)
-        (cairo-surface-flush (cadr fixture)))))
-   #:teardown
-   (lambda (fixture)
-     (cairo-destroy (caddr fixture))
-     (cairo-surface-destroy (cadr fixture)))))
+        (layout-tree
+         (completion-state->vui-tree
+          state #:prompt "dmenu: " #:maximum rows
+          #:width 800 #:padding 4)
+         #:width 800 #:height (menu-height 4 size rows)))))))
 
 (define-benchmark-suite (dmenu-benchmark-tests)
   (benchmark-test %warm-process-startup)

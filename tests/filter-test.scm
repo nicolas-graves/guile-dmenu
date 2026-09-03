@@ -1,10 +1,7 @@
 (use-modules (guile-dmenu completion)
-             (guile-dmenu cursor-render)
              (guile-dmenu filter)
-             (guile-dmenu pango)
-             (cairo)
+             (guile-dmenu graphics)
              (ice-9 hash-table)
-             (rnrs bytevectors)
              (srfi srfi-1)
              (srfi srfi-64))
 
@@ -299,35 +296,6 @@
 
 (test-begin "public initial collection input")
 
-(define (install-interface name exports)
-  (let ((module (define-module* name #:exports exports)))
-    (for-each (lambda (symbol)
-                (module-define! module symbol #f)
-                (module-export! module (list symbol)))
-              exports)))
-
-;; The public procedure reaches programmed collections before touching these
-;; compositor interfaces.  Stubs let this production-path regression load the
-;; real menu module even when guile-wayland is not installed in the unit-test
-;; environment.
-(install-interface '(guile-dmenu wayland)
-                   '(wayland-connection-surface wayland-connection-display
-                     wayland-connection-shm connect-wayland create-window
-                     wl-display-cancel-read wl-display-dispatch-pending
-                     wl-display-prepare-read))
-(install-interface '(guile-dmenu graphics)
-                   '(draw-menu make-menu-buffer-cache
-                     destroy-menu-buffer-cache! wrap-message-lines))
-(install-interface '(guile-dmenu keyboard)
-                   '(make-keyboard-session set-keyboard-session-key-handler!
-                     make-key-decoder make-seat-listener))
-(install-interface '(wayland client display)
-                   '(wl-display-get-fd wl-display-flush wl-display-read-events
-                     wl-display-disconnect))
-(install-interface '(wayland client protocol wayland)
-                   '(wl-surface-attach wl-surface-damage wl-surface-commit))
-(install-interface '(wayland client protocol xdg-shell)
-                   '(xdg-surface-ack-configure))
 
 (let ((received #f))
   (let* ((menu-interface (resolve-interface '(guile-dmenu menu)))
@@ -350,77 +318,27 @@
 
 (test-end "public initial collection input")
 
-(test-begin "in-memory cursor rendering")
+(test-begin "presentation helpers")
 
-(define render-width 240)
-(define render-padding 4)
-(define render-height 22)
+(test-equal "column wrapping preserves word boundaries"
+  '("alpha" "beta" "gamma")
+  (wrap-message-lines "alpha beta gamma" 6))
 
-(define (measured-cursor-x cr input input-x cursor-position)
-  (+ input-x 2
-     (pango-text-width cr (substring input 0 cursor-position))))
+(test-assert "pixel wrapping uses VUI Pango metrics"
+  (> (length (wrap-message-to-width
+              "WWWWWWWWWWWWWWWWWWWWWWWW with measured wrapping"
+              80 4))
+     1))
 
-(define (rendered-cursor-x input cursor-position)
-  (let* ((surface (cairo-image-surface-create
-                   'argb32 render-width render-height))
-         (cr (cairo-create surface))
-         (input-x 24)
-         (expected (measured-cursor-x cr input input-x cursor-position)))
-    ;; Black text on a black surface leaves the white cursor as the only
-    ;; non-black pixels, so its rectangle can be located in the image data.
-    (cairo-set-source-rgb cr 0 0 0)
-    (cairo-paint cr)
-    (draw-input-cursor! cr input cursor-position input-x render-padding
-                        render-height '(1 1 1))
-    (cairo-surface-flush surface)
-    (let* ((pixels (cairo-image-surface-get-data surface))
-           (stride (inexact->exact
-                    (cairo-image-surface-get-stride surface)))
-           (painted-columns
-            (filter
-             (lambda (x)
-               (any (lambda (y)
-                      (let ((offset (+ (* y stride) (* x 4))))
-                        (or (> (bytevector-u8-ref pixels offset) 0)
-                            (> (bytevector-u8-ref pixels (+ offset 1)) 0)
-                            (> (bytevector-u8-ref pixels (+ offset 2)) 0))))
-                    (iota render-height)))
-             (iota render-width))))
-      (cairo-destroy cr)
-      (cairo-surface-destroy surface)
-      (list expected (and (pair? painted-columns) (car painted-columns))))))
+(test-equal "pixel wrapping preserves the truncation marker"
+  '("alpha" "... [truncated]")
+  (wrap-message-to-width "alpha\nbeta\ngamma" 800 4 2))
 
-(for-each
- (lambda (fixture)
-   (let ((label (car fixture))
-         (input (cadr fixture))
-         (position (caddr fixture)))
-     (let ((coordinates (rendered-cursor-x input position)))
-       (test-equal label (car coordinates) (cadr coordinates)))))
- '(("cursor rectangle is at the beginning of empty input" "" 0)
-   ("cursor rectangle is in the middle of input" "abcd" 2)
-   ("cursor rectangle is at trailing-space x-advance" "ab " 3)))
+(test-equal "visible window fills the final page"
+  '(("three" "four") 1)
+  (menu-visible-window '("one" "two" "three" "four") 3 2))
 
-(let* ((surface (cairo-image-surface-create 'argb32 1 1))
-       (cr (cairo-create surface)))
-  (test-assert "Pango measurement includes trailing whitespace"
-    (> (pango-text-width cr "ab ")
-       (pango-text-width cr "ab")))
-  (let* ((maximum-width 120)
-         (lines (pango-wrap-text
-                 cr
-                 "WWWWWWWWWWWWWWWWWWWWWWWW with measured wrapping"
-                 maximum-width)))
-    (test-assert "Pango wrapping splits text by measured width"
-      (> (length lines) 1))
-    (test-assert "every Pango-wrapped line fits its pixel boundary"
-      (every (lambda (line)
-               (<= (pango-text-width cr line) maximum-width))
-             lines)))
-  (cairo-destroy cr)
-  (cairo-surface-destroy surface))
-
-(test-end "in-memory cursor rendering")
+(test-end "presentation helpers")
 
 (test-begin "substring completion")
 

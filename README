@@ -22,6 +22,12 @@ ingestion, collection normalization, the Wayland connection, initial state,
 window creation, and the first committed frame.  Normal command output and
 behavior are unchanged when tracing is disabled.
 
+The production UI is declarative: guile-dmenu owns completion state, actions,
+and dmenu-specific presentation parameters, while guile-vui owns input,
+Pango/Cairo rendering, Wayland lifecycle, scaling, and shared-memory buffers.
+Guile-wayland remains the low-level generated protocol binding used by
+guile-vui; guile-dmenu does not maintain a second compositor stack.
+
 Structured questions can now drive real graphical sessions through
 ~(guile-dmenu structured-prompt)~:
 
@@ -143,11 +149,10 @@ timeouts are passed through unchanged.  Each graphical request runs in a
 one-shot child process; the persistent MCP server remains available for pings,
 cancellation, and subsequent questions.
 
-Wayland setup and event processing run inside Guile Fibers.  A connection or
-startup exception is converted to a terminal ~graphical-failure~ result; it
-does not leave the question worker waiting on an orphaned result channel.  The
-parent also enforces the request deadline, terminates and reaps a stuck child,
-and suppresses late responses after cancellation.
+Guile-vui owns Wayland setup and event processing.  A connection or startup
+exception is converted to a terminal ~graphical-failure~ result.  The parent
+also enforces the request deadline, terminates and reaps a stuck child, and
+suppresses late responses after cancellation.
 
 For payload-free lifecycle diagnostics, set ~GUILE_DMENU_MCP_TRACE=stderr~ or
 set it to a file path.  Trace records contain request IDs, process IDs,
@@ -186,7 +191,7 @@ in your Sway configuration for the expected result (otherwise Sway will take ove
 - [X] Basic personalization: colors, prefix, border, wrap, item count, fixed
   height, line height (see "Configuration" below)
 - [X] Supplementary Unicode keyboard input
-- [ ] Complete Unicode shaping may require Pango.
+- [X] Unicode shaping, measurement, and font fallback through guile-vui Pango
 - [ ] Strict compatibility with the bemenu API/configuration library is not
   planned; see the comparison table above.
 - [X] Repeat
