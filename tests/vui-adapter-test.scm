@@ -48,6 +48,49 @@
   (map (lambda (node) (style-ref (element-style node) 'background-color))
        (element-children candidates)))
 
+(let* ((styled-state (make-completing-read-state "query" 2 '("zero" "one" "two")))
+       (styled-model
+        (completion-state->vui-model
+         styled-state #:row-height 27 #:filter-background 'filter-bg
+         #:filter-foreground 'filter-fg #:cursor-color 'caret
+         #:title-background 'title-bg #:title-foreground 'title-fg
+         #:alternate-background 'alternate-bg #:alternate-foreground 'alternate-fg
+         #:border-color 'edge #:border-width 3 #:selected-prefix "» "
+         #:input-wrapping? #t))
+       (styled-tree (completion-model->vui-tree styled-model))
+       (styled-row (car (element-children styled-tree)))
+       (prompt-node (car (element-children styled-row)))
+       (input-node (cadr (element-children styled-row)))
+       (styled-list (car (filter (lambda (node) (eq? (element-key node) 'candidates))
+                                 (element-children styled-tree))))
+       (rows (element-children styled-list)))
+  (test-equal "retained presentation parameters survive the model boundary"
+    '(filter-bg filter-fg caret title-bg title-fg alternate-bg alternate-fg
+                edge 3 "» " #t)
+    (map (lambda (key) (assq-ref styled-model key))
+         '(filter-background filter-foreground cursor-color
+           title-background title-foreground alternate-background
+           alternate-foreground border-color border-width selected-prefix
+           input-wrapping?)))
+  (test-equal "title, filter, cursor, border, and wrapping reach VUI styles"
+    '(title-bg title-fg filter-bg filter-fg caret edge 3 auto)
+    (list (style-ref (element-style prompt-node) 'background-color)
+          (style-ref (element-style prompt-node) 'color)
+          (style-ref (element-style input-node) 'background-color)
+          (style-ref (element-style input-node) 'color)
+          (style-ref (element-style input-node) 'cursor-color)
+          (style-ref (element-style styled-tree) 'border-color)
+          (style-ref (element-style styled-tree) 'border-width)
+          (style-ref (element-style input-node) 'max-height)))
+  (test-equal "alternate colors and selected prefix use absolute row identity"
+    '((black white "zero") (alternate-bg alternate-fg "one")
+      (blue white "» two"))
+    (map (lambda (node)
+           (list (style-ref (element-style node) 'background-color)
+                 (style-ref (element-style node) 'color)
+                 (assq-ref (element-properties node) 'label)))
+         rows)))
+
 (let* ((paged-state (make-completing-read-state
                      "λ" 7 '("零" "一" "二" "三" "四" "五" "六" "七")))
        (paged (completion-state->vui-model

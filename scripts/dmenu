@@ -18,6 +18,7 @@
     (prefix (single-char #\P) (value #t))
     (border (single-char #\B) (value #t))
     (fixed-height (value #f)) (line-height (value #t))
+    (input-wrap (value #f))
     (message (value #t)) (no-input (value #f)) (timeout (value #t))
     (nb (value #t)) (nf (value #t)) (hb (value #t)) (hf (value #t))
     (fb (value #t)) (ff (value #t)) (cb (value #t)) (tb (value #t))
@@ -54,6 +55,7 @@
   (and=> (option-ref opts 'prefix #f) prefix-text)
   (when (option-ref opts 'wrap #f) (wrap-navigation? #t))
   (when (option-ref opts 'fixed-height #f) (fixed-height? #t))
+  (when (option-ref opts 'input-wrap #f) (input-line-wrapping? #t))
   (let ((collection (read-stdin)))
     (report-startup-phase! 'input-ingested)
     (let ((answer (completing-read prompt collection

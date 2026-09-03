@@ -77,7 +77,17 @@ the initial press and every repeat without acquiring completion state."
                                       (normal-background 'black)
                                       (normal-foreground 'white)
                                       (highlight-background 'blue)
-                                      (highlight-foreground 'white))
+                                      (highlight-foreground 'white)
+                                      (filter-background #f)
+                                      (filter-foreground #f)
+                                      (cursor-color #f)
+                                      (title-background #f)
+                                      (title-foreground #f)
+                                      (alternate-background #f)
+                                      (alternate-foreground #f)
+                                      (border-color 'black) (border-width 0)
+                                      (selected-prefix "")
+                                      (input-wrapping? #f))
   "Return a detached, immutable-data snapshot of completion STATE."
   (unless (completing-read-state? state)
     (error "expected completing-read state" state))
@@ -94,9 +104,15 @@ the initial press and every repeat without acquiring completion state."
                (real? width) (>= width 0) (real? padding) (>= padding 0)
                (real? row-height) (>= row-height 0)
                (boolean? fixed-height?)
-               (every (lambda (color) (or (string? color) (symbol? color)))
+               (every (lambda (color) (or (not color) (string? color) (symbol? color)))
                       (list normal-background normal-foreground
-                            highlight-background highlight-foreground)))
+                            highlight-background highlight-foreground
+                            filter-background filter-foreground cursor-color
+                            title-background title-foreground
+                            alternate-background alternate-foreground
+                            border-color))
+               (real? border-width) (>= border-width 0)
+               (string? selected-prefix) (boolean? input-wrapping?))
     (error "invalid completion presentation" state))
   (let* ((options (completing-read-state-filtered-options state))
          (selected (completing-read-state-selected-index state)))
@@ -139,6 +155,17 @@ the initial press and every repeat without acquiring completion state."
          (normal-foreground . ,normal-foreground)
          (highlight-background . ,highlight-background)
          (highlight-foreground . ,highlight-foreground)
+         (filter-background . ,filter-background)
+         (filter-foreground . ,filter-foreground)
+         (cursor-color . ,cursor-color)
+         (title-background . ,title-background)
+         (title-foreground . ,title-foreground)
+         (alternate-background . ,alternate-background)
+         (alternate-foreground . ,alternate-foreground)
+         (border-color . ,border-color)
+         (border-width . ,border-width)
+         (selected-prefix . ,selected-prefix)
+         (input-wrapping? . ,input-wrapping?)
          (width . ,width)
          (padding . ,padding)
          (comment-index . ,comment-index)
@@ -159,29 +186,46 @@ the initial press and every repeat without acquiring completion state."
          (padding (assq-ref model 'padding))
          (root-style (make-style `((width . ,(assq-ref model 'width))
                                    (padding . ,padding)
+                                   (border-width . ,(assq-ref model 'border-width))
+                                   (border-color . ,(assq-ref model 'border-color))
                                    (background-color
                                     . ,(assq-ref model 'normal-background)))))
          (text-style
           (make-style `((color . ,(assq-ref model 'normal-foreground)))))
+         (prompt-style
+          (make-style `((background-color . ,(or (assq-ref model 'title-background)
+                                                 (assq-ref model 'normal-background)))
+                        (color . ,(or (assq-ref model 'title-foreground)
+                                     (assq-ref model 'normal-foreground))))))
          (input-style
           (make-style `((flex-grow . 1)
-                        (background-color . ,(assq-ref model 'normal-background))
-                        (color . ,(assq-ref model 'normal-foreground)))))
+                        (max-height . ,(if (assq-ref model 'input-wrapping?)
+                                          'auto (assq-ref model 'row-height)))
+                        (background-color . ,(or (assq-ref model 'filter-background)
+                                                (assq-ref model 'normal-background)))
+                        (color . ,(or (assq-ref model 'filter-foreground)
+                                     (assq-ref model 'normal-foreground)))
+                        (cursor-color . ,(or (assq-ref model 'cursor-color)
+                                            (assq-ref model 'normal-foreground))))))
          (option-style
-          (lambda (selected?)
+          (lambda (selected? absolute)
             (make-style
              `((height . ,(assq-ref model 'row-height))
                (background-color . ,(if selected?
                                         (assq-ref model 'highlight-background)
-                                        (assq-ref model 'normal-background)))
+                                        (or (and (odd? absolute)
+                                                 (assq-ref model 'alternate-background))
+                                            (assq-ref model 'normal-background))))
                (color . ,(if selected?
                              (assq-ref model 'highlight-foreground)
-                             (assq-ref model 'normal-foreground)))))))
+                             (or (and (odd? absolute)
+                                      (assq-ref model 'alternate-foreground))
+                                 (assq-ref model 'normal-foreground))))))))
          (visible (assq-ref model 'visible-options)))
     (column
      (append
       (list (row (list (text (assq-ref model 'prompt) #:key 'prompt
-                             #:style text-style)
+                             #:style prompt-style)
                        (text-input (assq-ref model 'input-text)
                                    #:key 'completion-input
                                    #:style input-style
@@ -199,8 +243,11 @@ the initial press and every repeat without acquiring completion state."
         (append
          (map (lambda (option offset)
                 (let ((absolute (+ start offset)))
-                  (button option #:key absolute #:action 'select
-                          #:style (option-style (= absolute selected))
+                  (button (if (= absolute selected)
+                              (string-append (assq-ref model 'selected-prefix) option)
+                              option)
+                          #:key absolute #:action 'select
+                          #:style (option-style (= absolute selected) absolute)
                           #:disabled? (not (= absolute selected)))))
               visible (iota (length visible)))
          (map (lambda (offset)
