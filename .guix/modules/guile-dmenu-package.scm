@@ -126,7 +126,7 @@
                           "#t")))))))))))
 
 (define %guile-vui-commit
-  "b35ea090d22d4e821950e180e06ada58b06714b7")
+  "80501a5d6d6f686bf3ae9f1ff2f0d1cc0e9e2c5a")
 
 (define-public guile-vui-dmenu
   (package
@@ -137,7 +137,7 @@
                                       %guile-vui-commit)))
        (dependency-origin
         source %guile-vui-commit
-        "1p5shsi06ls112wvk7vdvxv5fhwl92vqa961gbr2pv5vr2mxsqc6"
+        "07zwb9ax5k5ggb2n9nmi120afk6hg1q2j8c8jgfk0mym5b5dzyfg"
         (git-file-name "guile-vui" %guile-vui-commit))))
     (build-system gnu-build-system)
     (arguments

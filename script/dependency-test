@@ -18,7 +18,7 @@ wayland_source=${GUILE_WAYLAND_SOURCE:-$dependency_root/guile-wayland}
 export XDG_CACHE_HOME="$worker_cache"
 
 test "$(git -C "$vui_source" rev-parse HEAD)" = \
-  b35ea090d22d4e821950e180e06ada58b06714b7
+  80501a5d6d6f686bf3ae9f1ff2f0d1cc0e9e2c5a
 test "$(git -C "$wayland_source" rev-parse HEAD)" = \
   35eff2a28f9843dbdddeee2cc594788b72569bad
 test -z "$(git -C "$vui_source" status --porcelain)"
@@ -78,7 +78,7 @@ dirty_result=$(GUILE_VUI_SOURCE="$dirty_vui" \
 test "$dirty_result" = "$vui"
 
 case "$vui" in
-  /gnu/store/*-guile-vui-0.1.0-1.b35ea09) ;;
+  /gnu/store/*-guile-vui-0.1.0-1.80501a5) ;;
   *) echo "unexpected guile-vui package: $vui" >&2; exit 1 ;;
 esac
 

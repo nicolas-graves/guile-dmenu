@@ -44,7 +44,7 @@
   (map (lambda (node) (assq-ref (element-properties node) 'disabled?))
        (element-children candidates)))
 (test-equal "selected row owns explicit highlight style"
-  '(normal highlight)
+  '(black blue)
   (map (lambda (node) (style-ref (element-style node) 'background-color))
        (element-children candidates)))
 

@@ -73,7 +73,11 @@ the initial press and every repeat without acquiring completion state."
                                       (comment-state #f) (comment-index #f)
                                       (width 800) (padding 4)
                                       (row-height (+ 19 (* 2 padding)))
-                                      (fixed-height? #f))
+                                      (fixed-height? #f)
+                                      (normal-background 'black)
+                                      (normal-foreground 'white)
+                                      (highlight-background 'blue)
+                                      (highlight-foreground 'white))
   "Return a detached, immutable-data snapshot of completion STATE."
   (unless (completing-read-state? state)
     (error "expected completing-read state" state))
@@ -89,7 +93,10 @@ the initial press and every repeat without acquiring completion state."
                    (and (exact-integer? comment-index) (>= comment-index 0)))
                (real? width) (>= width 0) (real? padding) (>= padding 0)
                (real? row-height) (>= row-height 0)
-               (boolean? fixed-height?))
+               (boolean? fixed-height?)
+               (every (lambda (color) (or (string? color) (symbol? color)))
+                      (list normal-background normal-foreground
+                            highlight-background highlight-foreground)))
     (error "invalid completion presentation" state))
   (let* ((options (completing-read-state-filtered-options state))
          (selected (completing-read-state-selected-index state)))
@@ -128,6 +135,10 @@ the initial press and every repeat without acquiring completion state."
          (maximum . ,maximum)
          (reserved-option-rows . ,(if fixed-height? maximum (length visible)))
          (row-height . ,row-height)
+         (normal-background . ,normal-background)
+         (normal-foreground . ,normal-foreground)
+         (highlight-background . ,highlight-background)
+         (highlight-foreground . ,highlight-foreground)
          (width . ,width)
          (padding . ,padding)
          (comment-index . ,comment-index)
@@ -147,18 +158,30 @@ the initial press and every repeat without acquiring completion state."
          (start (assq-ref model 'visible-start))
          (padding (assq-ref model 'padding))
          (root-style (make-style `((width . ,(assq-ref model 'width))
-                                   (padding . ,padding))))
-         (input-style (make-style '((flex-grow . 1))))
+                                   (padding . ,padding)
+                                   (background-color
+                                    . ,(assq-ref model 'normal-background)))))
+         (text-style
+          (make-style `((color . ,(assq-ref model 'normal-foreground)))))
+         (input-style
+          (make-style `((flex-grow . 1)
+                        (background-color . ,(assq-ref model 'normal-background))
+                        (color . ,(assq-ref model 'normal-foreground)))))
          (option-style
           (lambda (selected?)
             (make-style
              `((height . ,(assq-ref model 'row-height))
-               (background-color . ,(if selected? 'highlight 'normal))
-               (color . ,(if selected? 'highlight-text 'normal-text))))))
+               (background-color . ,(if selected?
+                                        (assq-ref model 'highlight-background)
+                                        (assq-ref model 'normal-background)))
+               (color . ,(if selected?
+                             (assq-ref model 'highlight-foreground)
+                             (assq-ref model 'normal-foreground)))))))
          (visible (assq-ref model 'visible-options)))
     (column
      (append
-      (list (row (list (text (assq-ref model 'prompt) #:key 'prompt)
+      (list (row (list (text (assq-ref model 'prompt) #:key 'prompt
+                             #:style text-style)
                        (text-input (assq-ref model 'input-text)
                                    #:key 'completion-input
                                    #:style input-style
@@ -167,7 +190,8 @@ the initial press and every repeat without acquiring completion state."
                                    (not (assq-ref model 'input-enabled?))))
                  #:key 'input-row))
       (map (lambda (line index)
-             (text line #:key (string-append "message-" (number->string index))))
+             (text line #:key (string-append "message-" (number->string index))
+                   #:style text-style))
            (assq-ref model 'message-lines)
            (iota (length (assq-ref model 'message-lines))))
       (list
