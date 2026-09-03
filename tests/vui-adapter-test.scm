@@ -3,7 +3,9 @@
              (srfi srfi-1)
              (srfi srfi-64)
              (vui element)
+             (vui input)
              (vui layout)
+             (vui runtime)
              (vui style))
 
 (test-begin "vui-adapter")
@@ -171,20 +173,80 @@
          (BackSpace "" (control)) (u "界" ()) (u "u" (alt))
          (F1 "" ()) (compose "ab" ()))))
 
-(test-equal "repeat routing is pure and preserves candidate paging semantics"
-  '(1 2 3 4)
-  (let loop ((remaining 4)
-             (current (make-completing-read-state
-                       "" 0 '("zero" "one" "two" "three" "four"))))
-    (if (zero? remaining)
-        '()
-        (let ((next (cadr (dispatch-completion-vui-action
-                           current (route-key 'Down "" '())
-                           '("zero" "one" "two" "three" "four")
-                           '("zero" "one" "two" "three" "four")
-                           #:selection-mode 'menu))))
-          (cons (completing-read-state-selected-index next)
-                (loop (- remaining 1) next))))))
+(define (controller-press+repeat initial decoded options selection-mode)
+  "Drive one physical press and its scheduled repeat through VUI's controller."
+  (let ((callback #f) (actions '()) (outcomes '()))
+    (define (update current action)
+      (set! actions (append actions (list action)))
+      (let ((outcome (dispatch-completion-vui-action
+                      current action options options
+                      #:selection-mode selection-mode)))
+        (set! outcomes (append outcomes (list outcome)))
+        (if (eq? (car outcome) 'state-update) (cadr outcome) current)))
+    (define app
+      (make-vui-app initial update
+                    (lambda (current)
+                      (completion-state->vui-tree current #:maximum 2))))
+    (define input
+      (make-input-controller
+       app
+       `((keymap-new . ,identity)
+         (state-new . ,identity)
+         (decode-key . ,(lambda (_state _keycode _pressed?) decoded))
+         (schedule-repeat . ,(lambda (repeat)
+                               (set! callback repeat)
+                               'repeat-token))
+         (cancel-repeat . ,(lambda (_token) #t)))
+       (lambda () (layout-tree (vui-view app) #:width 320 #:height 200))
+       #:route-key route-key))
+    (input-keymap! input 'fixture-keymap)
+    (input-key! input 9 #t)
+    (unless (procedure? callback) (error "repeat was not scheduled" decoded))
+    (callback)
+    (input-key! input 9 #f)
+    (input-close! input)
+    (list actions outcomes (vui-model app))))
+
+(define (state-summary state)
+  (list (completing-read-state-input-text state)
+        (completing-read-state-cursor-position state)
+        (completing-read-state-selected-index state)
+        (completing-read-state-completion-invoked? state)))
+
+(let* ((options '("alpha" "alpine" "beta" "delta"))
+       (cases
+        `((editing ,(make-completing-read-state "" 0 options) (x "x" () #t) text)
+          (backspace ,(make-completing-read-state "abcd" 0 options 4)
+                     (BackSpace "" () #t) text)
+          (cursor ,(make-completing-read-state "abcd" 0 options 3)
+                  (Left "" () #t) text)
+          (completion ,(make-completing-read-state "al" 0 options 2)
+                      (Tab "" () #t) text)
+          (paging ,(make-completing-read-state "" 0 options)
+                  (Down "" () #t) menu)
+          (accept ,(make-completing-read-state "" 0 options)
+                  (Return "" () #t) menu)
+          (cancel ,(make-completing-read-state "" 0 options)
+                  (Escape "" () #t) menu)))
+       (results
+        (map (lambda (case)
+               (controller-press+repeat (list-ref case 1) (list-ref case 2)
+                                        options (list-ref case 3)))
+             cases)))
+  (test-equal "VUI press and repeat route the same complete action classes"
+    '(((input-text "x") (input-text "x"))
+      (backspace backspace) (left left) (complete complete)
+      (next next) (select select) (cancel cancel))
+    (map car results))
+  (test-equal "repeated editing, cursor, completion, and paging stay domain-owned"
+    '(("xx" 2 0 #f) ("ab" 2 0 #f) ("abcd" 1 0 #f)
+      ("alp" 3 0 #t) ("" 0 2 #f))
+    (map (lambda (result) (state-summary (list-ref result 2)))
+         (take results 5)))
+  (test-equal "repeated accept and cancel preserve terminal outcomes"
+    '(((selected "alpha") (selected "alpha"))
+      ((cancelled) (cancelled)))
+    (map (lambda (result) (list-ref result 1)) (drop results 5))))
 
 (test-error "route-key rejects malformed normalized input" #t
   (route-key 'a "a" '(control 1)))

@@ -100,6 +100,27 @@
           (close-port (cdr errors))
           (list pid (cdr input) (car output) (car errors))))))
 
+(define (start-vui-route-client session scenario)
+  (let* ((output (pipe))
+         (errors (pipe))
+         (pid (primitive-fork)))
+    (if (zero? pid)
+        (begin
+          (setenv "XDG_RUNTIME_DIR" (river-session-runtime-dir session))
+          (setenv "WAYLAND_DISPLAY" (river-session-display session))
+          (close-port (car output))
+          (close-port (car errors))
+          (dup2 (fileno (cdr output)) 1)
+          (dup2 (fileno (cdr errors)) 2)
+          (execlp "guile" "guile" "--no-auto-compile"
+                  "-L" (string-append project-dir "/src")
+                  "-s" (string-append project-dir "/tests/vui-route-client.scm")
+                  scenario))
+        (begin
+          (close-port (cdr output))
+          (close-port (cdr errors))
+          (list pid (car output) (car errors))))))
+
 (define (configured-event events)
   (find (match-lambda
           (('window-configured _ 640 height) (> height 0))
@@ -243,6 +264,32 @@
         (string-contains stdout
                          "\"comment\":\"cover tab comments in river\""))
       (test-equal "choice comment emitted no diagnostics" "" stderr)))
+  (for-each
+   (lambda (case)
+     (let* ((scenario (car case))
+            (keys (cadr case))
+            (expected (caddr case))
+            (event-count (length (read-river-manager-events session)))
+            (client (start-vui-route-client session scenario)))
+       (eventually (string-append "VUI route fixture configured: " scenario)
+                   (lambda ()
+                     (configured-event
+                      (drop (read-river-manager-events session) event-count))))
+       (apply river-session-wtype session keys)
+       (let ((status (cdr (waitpid (car client))))
+             (stdout (get-string-all (cadr client)))
+             (stderr (get-string-all (caddr client))))
+         (test-equal (string-append "VUI route fixture exits: " scenario)
+           0 (status:exit-val status))
+         (test-equal (string-append "run-wayland-vui routes workflow: " scenario)
+           expected stdout)
+         (test-equal (string-append "VUI route fixture diagnostics: " scenario)
+           "" stderr))))
+   '(("details" ("-s" "100" "-k" "Tab" "-k" "Return")
+      "(details \"alpha\")\n")
+     ("comment" ("-s" "100" "-k" "Tab" "draft" "-k" "Escape"
+                 "-k" "Tab" "final" "-k" "Return")
+      "(comment 0 \"final\")\n")))
   (let* ((event-count (length (read-river-manager-events session)))
          (client (start-mcp session))
          (initial-thread-count (process-thread-count (car client)))
